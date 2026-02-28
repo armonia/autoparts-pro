@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoParts Pro — Catalogo & Gestionale</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<button class="mobile-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')"><i class="fas fa-bars"></i></button>
+
+<aside class="sidebar">
+<div class="sidebar-brand">
+<div class="logo">AP</div>
+<div><h2>AutoParts Pro</h2><small>Catalogo & Gestionale</small></div>
+</div>
+<nav>
+<div class="sidebar-section">Catalogo (G-CAT)</div>
+<div class="nav-item active" data-page="ricerca" onclick="showPage('ricerca')"><i class="fas fa-search"></i> Ricerca Veicolo</div>
+<div class="nav-item" data-page="catalogo" onclick="showPage('catalogo')"><i class="fas fa-cogs"></i> Catalogo Ricambi</div>
+<div class="nav-item" data-page="crossref" onclick="showPage('crossref')"><i class="fas fa-exchange-alt"></i> Cross-Reference</div>
+<div class="nav-item" data-page="manodopera" onclick="showPage('manodopera')"><i class="fas fa-clock"></i> Tempi Manodopera</div>
+<div class="sidebar-section">Gestionale (SirJ)</div>
+<div class="nav-item" data-page="dashboard" onclick="showPage('dashboard')"><i class="fas fa-chart-line"></i> Dashboard</div>
+<div class="nav-item" data-page="magazzino" onclick="showPage('magazzino')"><i class="fas fa-warehouse"></i> Magazzino</div>
+<div class="nav-item" data-page="clienti" onclick="showPage('clienti')"><i class="fas fa-users"></i> Clienti</div>
+<div class="nav-item" data-page="fornitori" onclick="showPage('fornitori')"><i class="fas fa-truck"></i> Fornitori</div>
+<div class="nav-item" data-page="fatture" onclick="showPage('fatture')"><i class="fas fa-file-invoice-dollar"></i> Fatturazione</div>
+<div class="nav-item" data-page="bi" onclick="showPage('bi')"><i class="fas fa-chart-pie"></i> Business Intelligence</div>
+<div class="sidebar-section">Sistema</div>
+<div class="nav-item" data-page="impostazioni" onclick="showPage('impostazioni')"><i class="fas fa-cog"></i> Impostazioni</div>
+</nav>
+</aside>
+
+<div class="main">
+<div class="topbar">
+<div class="search-box">
+<i class="fas fa-search"></i>
+<input type="text" placeholder="Cerca ricambi, clienti, ordini..." id="globalSearch" onkeyup="globalSearchHandler(event)">
+</div>
+<div class="topbar-right">
+<div class="notif cart-badge" onclick="showPage('magazzino')"><i class="fas fa-shopping-cart"></i><span class="cart-count" id="cartCount">0</span></div>
+<div class="notif"><i class="fas fa-bell"></i><span class="dot"></span></div>
+<div class="avatar">AP</div>
+</div>
+</div>
+<div class="content">
+
+<!-- ===== RICERCA VEICOLO ===== -->
+<div class="page active" id="page-ricerca">
+<div id="ricercaBanner"></div>
+<div class="lookup-box">
+<h2><i class="fas fa-search"></i> Ricerca Veicolo</h2>
+<p>Inserisci la targa italiana per ottenere i dati del veicolo tramite API</p>
+<div class="lookup-tabs">
+<button class="lookup-tab active" onclick="switchLookup('targa',this)">Targa</button>
+<button class="lookup-tab" onclick="switchLookup('modello',this)">Marca / Modello</button>
+</div>
+<div id="lookup-targa" class="lookup-input-row">
+<input type="text" placeholder="ES: AB123CD" id="inputTarga" maxlength="7" style="text-transform:uppercase;letter-spacing:2px;max-width:240px" onkeydown="if(event.key==='Enter')searchByPlate()">
+<button class="btn btn-orange" onclick="searchByPlate()" id="btnSearchPlate"><i class="fas fa-search"></i> Cerca</button>
+</div>
+<div id="lookup-modello" class="lookup-input-row" style="display:none">
+<div class="combobox-wrap"><input type="text" id="inputMarca" placeholder="Cerca marca..." autocomplete="off" class="combobox-input"><select id="selMarca" onchange="loadModelsForMfr();syncComboLabel('selMarca','inputMarca')"><option value="">— Marca —</option></select></div>
+<div class="combobox-wrap"><input type="text" id="inputModello" placeholder="Cerca modello..." autocomplete="off" class="combobox-input"><select id="selModello" onchange="loadTypesForModel();syncComboLabel('selModello','inputModello')"><option value="">— Modello —</option></select></div>
+<div class="combobox-wrap"><input type="text" id="inputType" placeholder="Cerca versione..." autocomplete="off" class="combobox-input"><select id="selType" onchange="syncComboLabel('selType','inputType')"><option value="">— Versione —</option></select></div>
+<button class="btn btn-orange" onclick="searchByModel()"><i class="fas fa-search"></i> Cerca</button>
+</div>
+</div>
+<div id="vehicleResults" class="vehicle-grid"></div>
+<div id="vehicleHistory"></div>
+</div>
+
+<!-- ===== CATALOGO RICAMBI ===== -->
+<div class="page" id="page-catalogo">
+<div id="catalogoBanner"></div>
+<h2 style="margin-bottom:4px">📋 Catalogo Ricambi</h2>
+<p style="color:var(--text-light);margin-bottom:20px">Naviga il catalogo per marca → modello → versione → categoria → ricambi</p>
+<div id="catalogBreadcrumb" class="breadcrumb"></div>
+<div style="margin-bottom:16px;position:relative"><input type="text" id="catalogFilter" placeholder="Filtra produttori..." style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;width:100%;max-width:400px" oninput="filterCatalogGrid(this.value)"></div>
+<div id="catalogContent">
+<div class="loading-overlay"><div class="spinner"></div><p>Caricamento produttori...</p></div>
+</div>
+</div>
+
+<!-- ===== CROSS-REFERENCE ===== -->
+<div class="page" id="page-crossref">
+<h2 style="margin-bottom:4px">🔄 Cross-Reference Ricambi</h2>
+<p style="color:var(--text-light);margin-bottom:20px">Cerca un codice OEM per trovare equivalenti aftermarket</p>
+<div class="card">
+<div class="card-body">
+<div class="form-row">
+<div class="form-group"><label>Codice OEM</label><input type="text" id="crossrefInput" placeholder="Es: 77367717" onkeydown="if(event.key==='Enter')searchCrossRef()"></div>
+<div class="form-group"><label>&nbsp;</label><button class="btn btn-primary" onclick="searchCrossRef()" style="width:100%"><i class="fas fa-search"></i> Cerca Equivalenti</button></div>
+</div>
+</div>
+</div>
+<div id="crossrefResults" class="crossref-results"></div>
+</div>
+
+<!-- ===== TEMPI MANODOPERA ===== -->
+<div class="page" id="page-manodopera">
+<h2 style="margin-bottom:4px">⏱️ Tempi Manodopera</h2>
+<p style="color:var(--text-light);margin-bottom:20px">Tempi di lavorazione di riferimento — fonte: Open Labor Project (community-based)</p>
+<div class="card" style="margin-bottom:20px">
+<div class="card-body" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+<div style="flex:1;min-width:200px;position:relative">
+<input type="text" id="laborSearch" placeholder="Cerca intervento..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px" oninput="renderLaborPage(document.getElementById('laborCatFilter').value, this.value)">
+</div>
+<select id="laborCatFilter" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px" onchange="renderLaborPage(this.value, document.getElementById('laborSearch').value)">
+<option value="Tutte">Tutte le categorie</option>
+</select>
+<div style="font-size:12px;color:var(--text-light)"><span id="laborCount">0</span> interventi</div>
+</div>
+</div>
+<div class="labor-section" id="laborContent"></div>
+<div style="margin-top:20px;padding:16px;background:var(--bg);border-radius:var(--radius);font-size:12px;color:var(--text-light)">
+<i class="fas fa-info-circle"></i> I tempi indicati sono di riferimento, basati su dati community di <strong>Open Labor Project</strong>. I tempi reali possono variare in base a modello, accessibilità, attrezzatura e condizioni del veicolo.
+</div>
+</div>
+
+<!-- ===== DASHBOARD ===== -->
+<div class="page" id="page-dashboard">
+<h2 style="margin-bottom:20px">📊 Dashboard</h2>
+<div class="stats-grid" id="dashboardStats">
+<div class="stat-card"><div class="icon-box blue"><i class="fas fa-euro-sign"></i></div><div class="info"><h3 id="dashRevenue">€ 0</h3><p>Fatturato Mese</p></div></div>
+<div class="stat-card"><div class="icon-box green"><i class="fas fa-shopping-bag"></i></div><div class="info"><h3 id="dashOrders">0</h3><p>Ordini Mese</p></div></div>
+<div class="stat-card"><div class="icon-box orange"><i class="fas fa-box"></i></div><div class="info"><h3 id="dashLowStock">0</h3><p>Prodotti Sotto Scorta</p></div></div>
+<div class="stat-card"><div class="icon-box red"><i class="fas fa-users"></i></div><div class="info"><h3 id="dashClients">0</h3><p>Clienti Attivi</p></div></div>
+</div>
+<div class="charts-grid">
+<div class="card"><div class="card-header"><h3>Fatturato Ultimi 6 Mesi</h3></div><div class="card-body"><div class="chart-container"><canvas id="chartRevenue"></canvas></div></div></div>
+<div class="card"><div class="card-header"><h3>Top Categorie</h3></div><div class="card-body"><div class="chart-container"><canvas id="chartCategories"></canvas></div></div></div>
+</div>
+<div class="card" style="margin-top:24px"><div class="card-header"><h3>Ordini Recenti</h3></div>
+<div class="card-body"><table><thead><tr><th>N° Ordine</th><th>Cliente</th><th>Data</th><th>Totale</th><th>Stato</th></tr></thead>
+<tbody id="recentOrdersTable"></tbody></table></div></div>
+</div>
+
+<!-- ===== MAGAZZINO ===== -->
+<div class="page" id="page-magazzino">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+<h2>📦 Gestione Magazzino</h2>
+<div style="display:flex;gap:8px">
+<button class="btn btn-primary" onclick="showAddStockModal()"><i class="fas fa-plus"></i> Aggiungi Articolo</button>
+<button class="btn btn-outline" onclick="showMovementModal()"><i class="fas fa-exchange-alt"></i> Movimento</button>
+</div>
+</div>
+<div class="stats-grid">
+<div class="stat-card"><div class="icon-box blue"><i class="fas fa-boxes"></i></div><div class="info"><h3 id="totalSkus">0</h3><p>Referenze Attive</p></div></div>
+<div class="stat-card"><div class="icon-box green"><i class="fas fa-check-circle"></i></div><div class="info"><h3 id="inStockCount">0</h3><p>In Stock</p></div></div>
+<div class="stat-card"><div class="icon-box orange"><i class="fas fa-exclamation-circle"></i></div><div class="info"><h3 id="lowStockCount">0</h3><p>Sotto Scorta</p></div></div>
+<div class="stat-card"><div class="icon-box red"><i class="fas fa-times-circle"></i></div><div class="info"><h3 id="outStockCount">0</h3><p>Esauriti</p></div></div>
+</div>
+<div class="card"><div class="card-header"><h3>Inventario</h3><input type="text" placeholder="Cerca..." style="padding:8px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px" id="stockSearch" oninput="renderStock()"></div>
+<div class="card-body" style="overflow-x:auto"><table><thead><tr><th>Codice</th><th>Descrizione</th><th>Categoria</th><th>Giacenza</th><th>Min</th><th>Stato</th><th>Ultimo Mov.</th><th></th></tr></thead>
+<tbody id="stockTable"></tbody></table></div></div>
+<div class="card"><div class="card-header"><h3>Movimenti Recenti</h3></div>
+<div class="card-body"><table><thead><tr><th>Data</th><th>Codice</th><th>Tipo</th><th>Q.tà</th><th>Note</th></tr></thead>
+<tbody id="movementsTable"></tbody></table></div></div>
+</div>
+
+<!-- ===== CLIENTI ===== -->
+<div class="page" id="page-clienti">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+<h2>👥 Gestione Clienti</h2>
+<button class="btn btn-primary" onclick="showClientModal()"><i class="fas fa-plus"></i> Nuovo Cliente</button>
+</div>
+<div class="card"><div class="card-header"><h3>Elenco Clienti</h3><input type="text" placeholder="Cerca..." style="padding:8px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px" id="clientSearch" oninput="renderClients()"></div>
+<div class="card-body"><table><thead><tr><th>Azienda</th><th>Contatto</th><th>Città</th><th>Telefono</th><th>Email</th><th>P.IVA</th><th>Stato</th><th></th></tr></thead>
+<tbody id="clientsTable"></tbody></table></div></div>
+</div>
+
+<!-- ===== FORNITORI ===== -->
+<div class="page" id="page-fornitori">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+<h2>🏭 Gestione Fornitori</h2>
+<button class="btn btn-primary" onclick="showSupplierModal()"><i class="fas fa-plus"></i> Nuovo Fornitore</button>
+</div>
+<div class="card"><div class="card-header"><h3>Elenco Fornitori</h3><input type="text" placeholder="Cerca..." style="padding:8px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px" id="supplierSearch" oninput="renderSuppliers()"></div>
+<div class="card-body"><table><thead><tr><th>Fornitore</th><th>Contatto</th><th>Specializzazione</th><th>Lead Time</th><th>Stato</th><th></th></tr></thead>
+<tbody id="suppliersTable"></tbody></table></div></div>
+</div>
+
+<!-- ===== FATTURE ===== -->
+<div class="page" id="page-fatture">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+<h2>📄 Fatturazione</h2>
+<button class="btn btn-primary" onclick="showInvoiceCreator()"><i class="fas fa-plus"></i> Nuova Fattura</button>
+</div>
+<div class="stats-grid">
+<div class="stat-card"><div class="icon-box green"><i class="fas fa-check"></i></div><div class="info"><h3 id="invPaid">0</h3><p>Pagate</p></div></div>
+<div class="stat-card"><div class="icon-box blue"><i class="fas fa-paper-plane"></i></div><div class="info"><h3 id="invSent">0</h3><p>Emesse</p></div></div>
+<div class="stat-card"><div class="icon-box orange"><i class="fas fa-clock"></i></div><div class="info"><h3 id="invPending">0</h3><p>In Scadenza</p></div></div>
+<div class="stat-card"><div class="icon-box red"><i class="fas fa-exclamation"></i></div><div class="info"><h3 id="invOverdue">0</h3><p>Scadute</p></div></div>
+</div>
+<div class="card"><div class="card-header"><h3>Elenco Fatture</h3></div>
+<div class="card-body"><table><thead><tr><th>N° Fattura</th><th>Cliente</th><th>Data</th><th>Imponibile</th><th>IVA</th><th>Totale</th><th>Stato</th><th></th></tr></thead>
+<tbody id="invoicesTable"></tbody></table></div></div>
+</div>
+
+<!-- ===== BI ===== -->
+<div class="page" id="page-bi">
+<h2 style="margin-bottom:24px">📈 Business Intelligence</h2>
+<div class="charts-grid">
+<div class="card"><div class="card-header"><h3>Trend Fatturato vs Costi</h3></div><div class="card-body"><div class="chart-container"><canvas id="biRevenue"></canvas></div></div></div>
+<div class="card"><div class="card-header"><h3>Margine per Categoria</h3></div><div class="card-body"><div class="chart-container"><canvas id="biMargin"></canvas></div></div></div>
+<div class="card"><div class="card-header"><h3>Segmenti Clienti</h3></div><div class="card-body"><div class="chart-container"><canvas id="biSegments"></canvas></div></div></div>
+<div class="card"><div class="card-header"><h3>Top 10 Prodotti</h3></div><div class="card-body"><div class="chart-container"><canvas id="biTopProducts"></canvas></div></div></div>
+</div>
+</div>
+
+<!-- ===== IMPOSTAZIONI ===== -->
+<div class="page" id="page-impostazioni">
+<h2 style="margin-bottom:24px">⚙️ Impostazioni</h2>
+
+<div class="setting-card">
+<h3><i class="fas fa-key" style="color:var(--accent)"></i> API Key RapidAPI</h3>
+<p style="color:var(--text-light);font-size:13px;margin-bottom:16px">Un'unica chiave per Informazioni Targhe e Auto Parts Catalog. <a href="https://rapidapi.com" target="_blank">Ottieni la tua chiave gratuita →</a></p>
+<div class="form-row">
+<div class="form-group"><label>RapidAPI Key</label><input type="password" id="settingsApiKey" placeholder="Incolla qui la tua RapidAPI key..."></div>
+<div class="form-group"><label>&nbsp;</label>
+<div style="display:flex;gap:8px">
+<button class="btn btn-primary" onclick="saveSettings()" style="flex:1"><i class="fas fa-save"></i> Salva</button>
+<button class="btn btn-outline" onclick="testConnection()" style="flex:1"><i class="fas fa-plug"></i> Test Connessione</button>
+</div>
+</div>
+</div>
+<div id="connectionStatus" style="margin-top:8px"></div>
+</div>
+
+<div class="setting-card">
+<h3><i class="fas fa-plug" style="color:var(--accent)"></i> Provider Dati</h3>
+<p style="color:var(--text-light);font-size:13px;margin-bottom:16px">Seleziona quale servizio utilizzare per ogni tipo di dato. L'architettura a provider permette di cambiare fonte dati senza modificare il codice.</p>
+<div class="form-row">
+<div class="form-group"><label>Ricerca Veicolo per Targa</label>
+<select id="settingsPlateProvider">
+<option value="informazioniTarghe">Informazioni Targhe (RapidAPI) — 10 ricerche/giorno</option>
+<option value="custom">Provider Personalizzato</option>
+</select></div>
+<div class="form-group"><label>Catalogo Ricambi</label>
+<select id="settingsPartsProvider">
+<option value="autoPartsCatalog">Auto Parts Catalog (RapidAPI) — 100 req/mese</option>
+<option value="custom">Provider Personalizzato</option>
+</select></div>
+</div>
+<div class="form-row">
+<div class="form-group"><label>Tempi Manodopera</label>
+<select id="settingsLaborProvider">
+<option value="openLabor">Open Labor Project — Gratuito</option>
+<option value="custom">Provider Personalizzato</option>
+</select></div>
+<div class="form-group"></div>
+</div>
+</div>
+
+<div class="setting-card">
+<h3><i class="fas fa-database" style="color:var(--accent)"></i> Dati Locali</h3>
+<p style="color:var(--text-light);font-size:13px;margin-bottom:16px">Cache API e dati gestionale sono salvati in IndexedDB nel browser.</p>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn btn-outline" onclick="showCacheStats()"><i class="fas fa-chart-bar"></i> Statistiche Cache</button>
+<button class="btn btn-outline" onclick="clearApiCache()"><i class="fas fa-trash"></i> Svuota Cache API</button>
+<button class="btn btn-red" onclick="if(confirm('⚠️ Eliminare TUTTI i dati locali? Questa azione è irreversibile.'))resetAllData()"><i class="fas fa-exclamation-triangle"></i> Reset Completo</button>
+</div>
+<div id="cacheStats" style="margin-top:16px"></div>
+</div>
+
+<div class="setting-card">
+<h3><i class="fas fa-info-circle" style="color:var(--accent)"></i> Informazioni</h3>
+<div style="color:var(--text-light);font-size:13px;line-height:1.8">
+<p><strong>AutoParts Pro</strong> — Catalogo ricambi e gestionale per autoricambi</p>
+<p>Versione: 2.0.0 — API Real Integration</p>
+<p>Limiti free tier: Targhe 10/giorno • Catalogo 100 req/mese</p>
+<p>Cache: risposte API conservate 24h per risparmiare quota</p>
+</div>
+</div>
+</div>
+
+</div><!-- /content -->
+</div><!-- /main -->
+
+<!-- MODALS -->
+<div class="modal-overlay" id="clientModal">
+<div class="modal" style="max-width:600px">
+<div class="modal-header"><h3 id="clientModalTitle">Nuovo Cliente</h3><button class="modal-close" onclick="closeModal('clientModal')">×</button></div>
+<div class="modal-body">
+<div class="form-row">
+<div class="form-group"><label>Azienda *</label><input type="text" id="cliCompany" placeholder="Ragione sociale"></div>
+<div class="form-group"><label>Contatto</label><input type="text" id="cliContact" placeholder="Nome referente"></div>
+</div>
+<div class="form-row">
+<div class="form-group"><label>Città</label><input type="text" id="cliCity" placeholder="Città"></div>
+<div class="form-group"><label>Telefono</label><input type="text" id="cliPhone" placeholder="Telefono"></div>
+</div>
+<div class="form-row">
+<div class="form-group"><label>Email</label><input type="email" id="cliEmail" placeholder="Email"></div>
+<div class="form-group"><label>P.IVA</label><input type="text" id="cliPiva" placeholder="IT00000000000"></div>
+</div>
+</div>
+<div class="modal-footer">
+<input type="hidden" id="cliEditId">
+<button class="btn btn-outline" onclick="closeModal('clientModal')">Annulla</button>
+<button class="btn btn-primary" onclick="saveClient()"><i class="fas fa-save"></i> Salva</button>
+</div>
+</div>
+</div>
+
+<div class="modal-overlay" id="supplierModal">
+<div class="modal" style="max-width:600px">
+<div class="modal-header"><h3>Nuovo Fornitore</h3><button class="modal-close" onclick="closeModal('supplierModal')">×</button></div>
+<div class="modal-body">
+<div class="form-row">
+<div class="form-group"><label>Nome Fornitore *</label><input type="text" id="supName" placeholder="Ragione sociale"></div>
+<div class="form-group"><label>Contatto</label><input type="text" id="supContact" placeholder="Nome referente"></div>
+</div>
+<div class="form-row">
+<div class="form-group"><label>Specializzazione</label><input type="text" id="supSpec" placeholder="Es: Frenanti, filtri"></div>
+<div class="form-group"><label>Lead Time</label><input type="text" id="supLead" placeholder="Es: 3-5 gg"></div>
+</div>
+<div class="form-row">
+<div class="form-group"><label>Email</label><input type="email" id="supEmail" placeholder="Email ordini"></div>
+<div class="form-group"><label>Telefono</label><input type="text" id="supPhone" placeholder="Telefono"></div>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-outline" onclick="closeModal('supplierModal')">Annulla</button>
+<button class="btn btn-primary" onclick="saveSupplier()"><i class="fas fa-save"></i> Salva</button>
+</div>
+</div>
+</div>
+
+<div class="modal-overlay" id="movementModal">
+<div class="modal" style="max-width:500px">
+<div class="modal-header"><h3>Registra Movimento</h3><button class="modal-close" onclick="closeModal('movementModal')">×</button></div>
+<div class="modal-body">
+<div class="form-group"><label>Tipo</label><select id="movType"><option value="in">Carico (IN)</option><option value="out">Scarico (OUT)</option></select></div>
+<div class="form-group"><label>Articolo</label><div style="position:relative"><input type="text" id="movPartInput" placeholder="Cerca articolo..." autocomplete="off"><input type="hidden" id="movPart"></div></div>
+<div class="form-group"><label>Quantità</label><input type="number" id="movQty" value="1" min="1"></div>
+<div class="form-group"><label>Note</label><input type="text" id="movNote" placeholder="Es: DDT 456/2026"></div>
+</div>
+<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('movementModal')">Annulla</button><button class="btn btn-primary" onclick="saveMovement()">Conferma</button></div>
+</div>
+</div>
+
+<div class="modal-overlay" id="stockModal">
+<div class="modal" style="max-width:600px">
+<div class="modal-header"><h3>Aggiungi Articolo a Magazzino</h3><button class="modal-close" onclick="closeModal('stockModal')">×</button></div>
+<div class="modal-body">
+<div class="form-row">
+<div class="form-group"><label>Codice *</label><input type="text" id="stkCode" placeholder="Codice articolo"></div>
+<div class="form-group"><label>Descrizione *</label><input type="text" id="stkName" placeholder="Nome articolo"></div>
+</div>
+<div class="form-row">
+<div class="form-group"><label>Categoria</label><select id="stkCat"><option value="freni">Freni</option><option value="filtri">Filtri</option><option value="sospensioni">Sospensioni</option><option value="motore">Motore</option><option value="carrozzeria">Carrozzeria</option><option value="elettrica">Impianto Elettrico</option><option value="climatizzazione">Climatizzazione</option><option value="trasmissione">Trasmissione</option><option value="altro">Altro</option></select></div>
+<div class="form-group"><label>Prezzo Listino €</label><input type="number" id="stkPrice" step="0.01" min="0" placeholder="0.00"></div>
+</div>
+<div class="form-row">
+<div class="form-group"><label>Giacenza Iniziale</label><input type="number" id="stkQty" value="0" min="0"></div>
+<div class="form-group"><label>Scorta Minima</label><input type="number" id="stkMin" value="5" min="0"></div>
+</div>
+</div>
+<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('stockModal')">Annulla</button><button class="btn btn-primary" onclick="saveStockItem()"><i class="fas fa-save"></i> Salva</button></div>
+</div>
+</div>
+
+<div class="modal-overlay" id="invoiceModal">
+<div class="modal" style="max-width:850px">
+<div class="modal-header"><h3 id="invoiceModalTitle">Nuova Fattura</h3><button class="modal-close" onclick="closeModal('invoiceModal')">×</button></div>
+<div class="modal-body" id="invoiceModalBody"></div>
+<div class="modal-footer">
+<button class="btn btn-outline" onclick="closeModal('invoiceModal')">Chiudi</button>
+<button class="btn btn-primary" id="invoiceModalSave" onclick="saveInvoice()" style="display:none"><i class="fas fa-save"></i> Salva Fattura</button>
+<button class="btn btn-green" id="invoiceModalPrint" onclick="toast('PDF generato con successo!','success')" style="display:none"><i class="fas fa-download"></i> Scarica PDF</button>
+</div>
+</div>
+</div>
+
+<!-- MODAL: Aggiungi al magazzino da catalogo -->
+<div class="modal-overlay" id="catalogStockModal">
+<div class="modal" style="max-width:450px">
+<div class="modal-header"><h3>Aggiungi al Magazzino</h3><button class="modal-close" onclick="closeModal('catalogStockModal')">×</button></div>
+<div class="modal-body">
+<div class="form-group"><label>Codice</label><input type="text" id="catStkCode" readonly></div>
+<div class="form-group"><label>Descrizione</label><input type="text" id="catStkName" readonly></div>
+<div class="form-row">
+<div class="form-group"><label>Quantità Iniziale</label><input type="number" id="catStkQty" value="1" min="0"></div>
+<div class="form-group"><label>Prezzo Listino €</label><input type="number" id="catStkPrice" step="0.01" min="0" placeholder="0.00"></div>
+</div>
+<div class="form-group"><label>Scorta Minima</label><input type="number" id="catStkMin" value="5" min="0"></div>
+</div>
+<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('catalogStockModal')">Annulla</button><button class="btn btn-primary" onclick="confirmAddArticleToStock()"><i class="fas fa-save"></i> Aggiungi</button></div>
+</div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- JS: load order matters (config → db → providers → charts → labor → app) -->
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/providers.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/labor.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
