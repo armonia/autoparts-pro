@@ -253,8 +253,8 @@ async function searchByPlate() {
 function renderPlateResult(plate, data) {
   const v = data || {};
 
-  // Check if this is a rich vehicle data response (Zyla / CarRegistrationAPI)
-  if (v._providerType === 'zyla' || v._providerType === 'carRegistrationApi' || v.CarMake) {
+  // Check if this is a rich vehicle data response (Zyla / CarRegistrationAPI / Demo)
+  if (v._providerType === 'zyla' || v._providerType === 'carRegistrationApi' || v._providerType === 'demo' || v.CarMake) {
     renderRichVehicleResult(plate, v);
     return;
   }
@@ -1456,6 +1456,7 @@ function onPlateProviderChange() {
   const descEl = document.getElementById('plateProviderDesc');
   if (descEl) {
     const descs = {
+      demo: '<i class="fas fa-play-circle" style="margin-right:6px;color:var(--accent)"></i>Modalità demo con dati di esempio. Nessuna API key richiesta. Prova con: <strong>FM020MB</strong> (Fiat 500X), <strong>GH456KL</strong> (VW Golf), <strong>EX789NP</strong> (Alfa Giulia), <strong>DW469CP</strong> (Toyota Yaris).',
       informazioniTarghe: '<i class="fas fa-info-circle" style="margin-right:6px"></i>Solo dati assicurativi (no marca/modello). Richiede selezione manuale del veicolo per cercare ricambi.',
       zyla: '<i class="fas fa-info-circle" style="margin-right:6px"></i>Dati completi veicolo (marca, modello, versione, cilindrata, carburante). Collegamento automatico al catalogo ricambi.',
       carRegistrationApi: '<i class="fas fa-info-circle" style="margin-right:6px"></i>Dati completi veicolo (marca, modello, versione). Collegamento automatico al catalogo ricambi.'

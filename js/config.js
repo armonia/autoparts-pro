@@ -2,7 +2,7 @@
 //  CONFIG & ABSTRACTION LAYER
 // ============================================================
 const CONFIG = {
-  plateProvider: 'informazioniTarghe',
+  plateProvider: 'demo',
   partsProvider: 'autoPartsCatalog',
   laborProvider: 'openLabor',
   rapidApiKey: '73513f5d7cmsh409c6b79390db57p163d16jsn6ef239e9de41',

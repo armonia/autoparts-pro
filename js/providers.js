@@ -325,6 +325,82 @@ const PartsProviders = {
   }
 };
 
+// ============================================================
+//  DEMO DATA — realistic mock responses for common Italian plates
+//  Used as fallback when no API key is configured
+// ============================================================
+const DEMO_PLATES = {
+  'FM020MB': {
+    _providerType: 'demo',
+    Description: 'FIAT 500X 1.6 MULTIJET 120CV',
+    RegistrationYear: '2019',
+    CarMake: 'FIAT',
+    CarModel: '500X',
+    Version: '1.6 MultiJet II 120 CV Cross',
+    EngineSize: '1598 cc',
+    FuelType: 'Diesel',
+    ABS: 'Si',
+    AirBag: 'Si',
+    _insurance: { assicurato: true, compagnia: 'GREAT LAKES INSURANCE SE', polizza: 'BLP229859131', scadenza: '2027-02-13' }
+  },
+  'GH456KL': {
+    _providerType: 'demo',
+    Description: 'VOLKSWAGEN GOLF 1.5 TSI 150CV',
+    RegistrationYear: '2021',
+    CarMake: 'VOLKSWAGEN',
+    CarModel: 'GOLF',
+    Version: '1.5 TSI EVO ACT 150 CV Life',
+    EngineSize: '1498 cc',
+    FuelType: 'Benzina',
+    ABS: 'Si',
+    AirBag: 'Si',
+    _insurance: { assicurato: true, compagnia: 'ALLIANZ S.P.A.', polizza: 'ALZ887654321', scadenza: '2026-09-30' }
+  },
+  'EX789NP': {
+    _providerType: 'demo',
+    Description: 'ALFA ROMEO GIULIA 2.2 TURBODIESEL 190CV',
+    RegistrationYear: '2020',
+    CarMake: 'ALFA ROMEO',
+    CarModel: 'GIULIA',
+    Version: '2.2 Turbodiesel 190 CV AT8 Sprint',
+    EngineSize: '2143 cc',
+    FuelType: 'Diesel',
+    ABS: 'Si',
+    AirBag: 'Si',
+    _insurance: { assicurato: true, compagnia: 'GENERALI ITALIA S.P.A.', polizza: 'GEN112233445', scadenza: '2026-12-15' }
+  },
+  'DW469CP': {
+    _providerType: 'demo',
+    Description: 'TOYOTA YARIS 1.5 HYBRID 116CV',
+    RegistrationYear: '2022',
+    CarMake: 'TOYOTA',
+    CarModel: 'YARIS',
+    Version: '1.5 Hybrid 116 CV Active',
+    EngineSize: '1490 cc',
+    FuelType: 'Ibrido',
+    ABS: 'Si',
+    AirBag: 'Si',
+    _insurance: { assicurato: true, compagnia: 'UNIPOL SAI S.P.A.', polizza: 'UNI998877665', scadenza: '2027-05-20' }
+  }
+};
+
+// Demo plate provider — always works, no API key needed
+PlateProviders.demo = {
+  async lookup(plate) {
+    // Simulate API delay
+    await new Promise(r => setTimeout(r, 800 + Math.random() * 400));
+    const data = DEMO_PLATES[plate.toUpperCase()];
+    if (data) return { ...data };
+    // For unknown plates, generate a plausible response
+    throw new Error('NO_DATA');
+  }
+};
+
 // Unified provider access
-function getPlateProvider() { return PlateProviders[CONFIG.plateProvider] || PlateProviders.informazioniTarghe; }
+function getPlateProvider() {
+  const p = PlateProviders[CONFIG.plateProvider];
+  if (p) return p;
+  return PlateProviders.informazioniTarghe;
+}
+
 function getPartsProvider() { return PartsProviders[CONFIG.partsProvider] || PartsProviders.autoPartsCatalog; }
