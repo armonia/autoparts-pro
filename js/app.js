@@ -132,6 +132,12 @@ function switchCercaTab(tab, btn) {
   document.getElementById('cercaSectionVehicle').style.display = (tab === 'targa') ? '' : 'none';
   document.getElementById('cercaSectionCatalog').style.display = (tab === 'modello') ? '' : 'none';
   document.getElementById('cercaSectionCrossref').style.display = (tab === 'crossref') ? '' : 'none';
+
+  // Load catalog manufacturers when switching to modello tab
+  if (tab === 'modello') {
+    loadCatalogManufacturers();
+    loadMfrDropdown();
+  }
 }
 
 function showCatalogArea() {
