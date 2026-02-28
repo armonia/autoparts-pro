@@ -2,12 +2,12 @@
 //  CONFIG & ABSTRACTION LAYER
 // ============================================================
 const CONFIG = {
-  plateProvider: 'demo',
+  plateProvider: 'carRegistrationApi',
+  carRegUsername: 'armonia_autoparts',
   partsProvider: 'autoPartsCatalog',
   laborProvider: 'openLabor',
   rapidApiKey: '73513f5d7cmsh409c6b79390db57p163d16jsn6ef239e9de41',
   zylaApiKey: '',
-  carRegUsername: '',
   // Rate limits (free tier) - hard stop to prevent charges
   rateLimits: {
     plateLookupsPerDay: 10,
@@ -37,7 +37,7 @@ function loadConfig() {
     CONFIG.rapidApiKey = c.rapidApiKey || '';
     CONFIG.zylaApiKey = c.zylaApiKey || '';
     CONFIG.carRegUsername = c.carRegUsername || '';
-    CONFIG.plateProvider = c.plateProvider || 'informazioniTarghe';
+    CONFIG.plateProvider = c.plateProvider || 'carRegistrationApi';
     CONFIG.partsProvider = c.partsProvider || 'autoPartsCatalog';
     CONFIG.laborProvider = c.laborProvider || 'openLabor';
   }
