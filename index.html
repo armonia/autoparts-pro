@@ -17,19 +17,12 @@
 <div><h2>AutoParts Pro</h2><small>Catalogo & Gestionale</small></div>
 </div>
 <nav>
-<div class="sidebar-section">Catalogo (G-CAT)</div>
-<div class="nav-item active" data-page="ricerca" onclick="showPage('ricerca')"><i class="fas fa-search"></i> Ricerca Veicolo</div>
-<div class="nav-item" data-page="catalogo" onclick="showPage('catalogo')"><i class="fas fa-cogs"></i> Catalogo Ricambi</div>
-<div class="nav-item" data-page="crossref" onclick="showPage('crossref')"><i class="fas fa-exchange-alt"></i> Cross-Reference</div>
-<div class="nav-item" data-page="manodopera" onclick="showPage('manodopera')"><i class="fas fa-clock"></i> Tempi Manodopera</div>
-<div class="sidebar-section">Gestionale (SirJ)</div>
-<div class="nav-item" data-page="dashboard" onclick="showPage('dashboard')"><i class="fas fa-chart-line"></i> Dashboard</div>
+<div class="nav-item active" data-page="cerca" onclick="showPage('cerca')"><i class="fas fa-search"></i> Cerca</div>
+<div class="nav-item" data-page="manodopera" onclick="showPage('manodopera')"><i class="fas fa-clock"></i> Manodopera</div>
+<div class="nav-item" data-page="analytics" onclick="showPage('analytics')"><i class="fas fa-chart-line"></i> Analytics</div>
 <div class="nav-item" data-page="magazzino" onclick="showPage('magazzino')"><i class="fas fa-warehouse"></i> Magazzino</div>
-<div class="nav-item" data-page="clienti" onclick="showPage('clienti')"><i class="fas fa-users"></i> Clienti</div>
-<div class="nav-item" data-page="fornitori" onclick="showPage('fornitori')"><i class="fas fa-truck"></i> Fornitori</div>
+<div class="nav-item" data-page="anagrafiche" onclick="showPage('anagrafiche')"><i class="fas fa-users"></i> Anagrafiche</div>
 <div class="nav-item" data-page="fatture" onclick="showPage('fatture')"><i class="fas fa-file-invoice-dollar"></i> Fatturazione</div>
-<div class="nav-item" data-page="bi" onclick="showPage('bi')"><i class="fas fa-chart-pie"></i> Business Intelligence</div>
-<div class="sidebar-section">Sistema</div>
 <div class="nav-item" data-page="impostazioni" onclick="showPage('impostazioni')"><i class="fas fa-cog"></i> Impostazioni</div>
 </nav>
 </aside>
@@ -38,7 +31,8 @@
 <div class="topbar">
 <div class="search-box">
 <i class="fas fa-search"></i>
-<input type="text" placeholder="Cerca ricambi, clienti, ordini..." id="globalSearch" onkeyup="globalSearchHandler(event)">
+<input type="text" placeholder="Cerca ricambi, clienti, targhe..." id="globalSearch" autocomplete="off">
+<div class="gs-dropdown" id="gsDropdown"></div>
 </div>
 <div class="topbar-right">
 <div class="notif cart-badge" onclick="showPage('magazzino')"><i class="fas fa-shopping-cart"></i><span class="cart-count" id="cartCount">0</span></div>
@@ -48,56 +42,50 @@
 </div>
 <div class="content">
 
-<!-- ===== RICERCA VEICOLO ===== -->
-<div class="page active" id="page-ricerca">
-<div id="ricercaBanner"></div>
+<!-- ===== CERCA (merged: Ricerca Veicolo + Catalogo + Cross-Reference) ===== -->
+<div class="page active" id="page-cerca">
+<div id="cercaBanner"></div>
 <div class="lookup-box">
-<h2><i class="fas fa-search"></i> Ricerca Veicolo</h2>
-<p>Inserisci la targa italiana per ottenere i dati del veicolo tramite API</p>
+<h2><i class="fas fa-search"></i> Ricerca Unificata</h2>
+<p>Cerca per targa, marca/modello oppure codice OEM cross-reference</p>
 <div class="lookup-tabs">
-<button class="lookup-tab active" onclick="switchLookup('targa',this)">Targa</button>
-<button class="lookup-tab" onclick="switchLookup('modello',this)">Marca / Modello</button>
+<button class="lookup-tab active" onclick="switchCercaTab('targa',this)">Targa</button>
+<button class="lookup-tab" onclick="switchCercaTab('modello',this)">Marca / Modello</button>
+<button class="lookup-tab" onclick="switchCercaTab('crossref',this)">Cross-Reference</button>
 </div>
-<div id="lookup-targa" class="lookup-input-row">
+<div id="cerca-targa" class="lookup-input-row">
 <input type="text" placeholder="ES: AB123CD" id="inputTarga" maxlength="7" style="text-transform:uppercase;letter-spacing:2px;max-width:240px" onkeydown="if(event.key==='Enter')searchByPlate()">
 <button class="btn btn-orange" onclick="searchByPlate()" id="btnSearchPlate"><i class="fas fa-search"></i> Cerca</button>
 </div>
-<div id="lookup-modello" class="lookup-input-row" style="display:none">
+<div id="cerca-modello" class="lookup-input-row" style="display:none">
 <div class="combobox-wrap"><input type="text" id="inputMarca" placeholder="Cerca marca..." autocomplete="off" class="combobox-input"><select id="selMarca" onchange="loadModelsForMfr();syncComboLabel('selMarca','inputMarca')"><option value="">— Marca —</option></select></div>
 <div class="combobox-wrap"><input type="text" id="inputModello" placeholder="Cerca modello..." autocomplete="off" class="combobox-input"><select id="selModello" onchange="loadTypesForModel();syncComboLabel('selModello','inputModello')"><option value="">— Modello —</option></select></div>
 <div class="combobox-wrap"><input type="text" id="inputType" placeholder="Cerca versione..." autocomplete="off" class="combobox-input"><select id="selType" onchange="syncComboLabel('selType','inputType')"><option value="">— Versione —</option></select></div>
 <button class="btn btn-orange" onclick="searchByModel()"><i class="fas fa-search"></i> Cerca</button>
 </div>
+<div id="cerca-crossref" class="lookup-input-row" style="display:none">
+<input type="text" id="crossrefInput" placeholder="Es: 77367717" onkeydown="if(event.key==='Enter')searchCrossRef()">
+<button class="btn btn-orange" onclick="searchCrossRef()"><i class="fas fa-search"></i> Cerca Equivalenti</button>
 </div>
+</div>
+
+<!-- Vehicle results section -->
+<div id="cercaSectionVehicle">
 <div id="vehicleResults" class="vehicle-grid"></div>
 <div id="vehicleHistory"></div>
 </div>
-
-<!-- ===== CATALOGO RICAMBI ===== -->
-<div class="page" id="page-catalogo">
-<div id="catalogoBanner"></div>
-<h2 style="margin-bottom:4px">📋 Catalogo Ricambi</h2>
-<p style="color:var(--text-light);margin-bottom:20px">Naviga il catalogo per marca → modello → versione → categoria → ricambi</p>
+<!-- Catalog section -->
+<div id="cercaSectionCatalog" style="display:none">
 <div id="catalogBreadcrumb" class="breadcrumb"></div>
 <div style="margin-bottom:16px;position:relative"><input type="text" id="catalogFilter" placeholder="Filtra produttori..." style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;width:100%;max-width:400px" oninput="filterCatalogGrid(this.value)"></div>
 <div id="catalogContent">
 <div class="loading-overlay"><div class="spinner"></div><p>Caricamento produttori...</p></div>
 </div>
 </div>
-
-<!-- ===== CROSS-REFERENCE ===== -->
-<div class="page" id="page-crossref">
-<h2 style="margin-bottom:4px">🔄 Cross-Reference Ricambi</h2>
-<p style="color:var(--text-light);margin-bottom:20px">Cerca un codice OEM per trovare equivalenti aftermarket</p>
-<div class="card">
-<div class="card-body">
-<div class="form-row">
-<div class="form-group"><label>Codice OEM</label><input type="text" id="crossrefInput" placeholder="Es: 77367717" onkeydown="if(event.key==='Enter')searchCrossRef()"></div>
-<div class="form-group"><label>&nbsp;</label><button class="btn btn-primary" onclick="searchCrossRef()" style="width:100%"><i class="fas fa-search"></i> Cerca Equivalenti</button></div>
-</div>
-</div>
-</div>
+<!-- Cross-reference results section -->
+<div id="cercaSectionCrossref" style="display:none">
 <div id="crossrefResults" class="crossref-results"></div>
+</div>
 </div>
 
 <!-- ===== TEMPI MANODOPERA ===== -->
@@ -121,10 +109,10 @@
 </div>
 </div>
 
-<!-- ===== DASHBOARD ===== -->
-<div class="page" id="page-dashboard">
-<h2 style="margin-bottom:20px">📊 Dashboard</h2>
-<div class="stats-grid" id="dashboardStats">
+<!-- ===== ANALYTICS (merged: Dashboard + BI) ===== -->
+<div class="page" id="page-analytics">
+<h2 style="margin-bottom:20px">📊 Analytics</h2>
+<div class="stats-grid" id="analyticsStats">
 <div class="stat-card"><div class="icon-box blue"><i class="fas fa-euro-sign"></i></div><div class="info"><h3 id="dashRevenue">€ 0</h3><p>Fatturato Mese</p></div></div>
 <div class="stat-card"><div class="icon-box green"><i class="fas fa-shopping-bag"></i></div><div class="info"><h3 id="dashOrders">0</h3><p>Ordini Mese</p></div></div>
 <div class="stat-card"><div class="icon-box orange"><i class="fas fa-box"></i></div><div class="info"><h3 id="dashLowStock">0</h3><p>Prodotti Sotto Scorta</p></div></div>
@@ -137,6 +125,14 @@
 <div class="card" style="margin-top:24px"><div class="card-header"><h3>Ordini Recenti</h3></div>
 <div class="card-body"><table><thead><tr><th>N° Ordine</th><th>Cliente</th><th>Data</th><th>Totale</th><th>Stato</th></tr></thead>
 <tbody id="recentOrdersTable"></tbody></table></div></div>
+
+<h3 style="margin-top:32px;margin-bottom:20px;font-size:18px;font-weight:700">📈 Analisi Dettagliata</h3>
+<div class="charts-grid">
+<div class="card"><div class="card-header"><h3>Trend Fatturato vs Costi</h3></div><div class="card-body"><div class="chart-container"><canvas id="biRevenue"></canvas></div></div></div>
+<div class="card"><div class="card-header"><h3>Margine per Categoria</h3></div><div class="card-body"><div class="chart-container"><canvas id="biMargin"></canvas></div></div></div>
+<div class="card"><div class="card-header"><h3>Segmenti Clienti</h3></div><div class="card-body"><div class="chart-container"><canvas id="biSegments"></canvas></div></div></div>
+<div class="card"><div class="card-header"><h3>Top 10 Prodotti</h3></div><div class="card-body"><div class="chart-container"><canvas id="biTopProducts"></canvas></div></div></div>
+</div>
 </div>
 
 <!-- ===== MAGAZZINO ===== -->
@@ -162,26 +158,27 @@
 <tbody id="movementsTable"></tbody></table></div></div>
 </div>
 
-<!-- ===== CLIENTI ===== -->
-<div class="page" id="page-clienti">
+<!-- ===== ANAGRAFICHE (merged: Clienti + Fornitori) ===== -->
+<div class="page" id="page-anagrafiche">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
-<h2>👥 Gestione Clienti</h2>
-<button class="btn btn-primary" onclick="showClientModal()"><i class="fas fa-plus"></i> Nuovo Cliente</button>
+<h2>👥 Anagrafiche</h2>
+<div style="display:flex;gap:8px" id="anagActions">
+<button class="btn btn-primary" id="btnNewAnag" onclick="showClientModal()"><i class="fas fa-plus"></i> Nuovo Cliente</button>
 </div>
-<div class="card"><div class="card-header"><h3>Elenco Clienti</h3><input type="text" placeholder="Cerca..." style="padding:8px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px" id="clientSearch" oninput="renderClients()"></div>
-<div class="card-body"><table><thead><tr><th>Azienda</th><th>Contatto</th><th>Città</th><th>Telefono</th><th>Email</th><th>P.IVA</th><th>Stato</th><th></th></tr></thead>
-<tbody id="clientsTable"></tbody></table></div></div>
 </div>
-
-<!-- ===== FORNITORI ===== -->
-<div class="page" id="page-fornitori">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
-<h2>🏭 Gestione Fornitori</h2>
-<button class="btn btn-primary" onclick="showSupplierModal()"><i class="fas fa-plus"></i> Nuovo Fornitore</button>
+<div class="tabs">
+<div class="tab active" data-anag="clienti" onclick="switchAnagTab('clienti',this)">Clienti</div>
+<div class="tab" data-anag="fornitori" onclick="switchAnagTab('fornitori',this)">Fornitori</div>
 </div>
-<div class="card"><div class="card-header"><h3>Elenco Fornitori</h3><input type="text" placeholder="Cerca..." style="padding:8px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px" id="supplierSearch" oninput="renderSuppliers()"></div>
-<div class="card-body"><table><thead><tr><th>Fornitore</th><th>Contatto</th><th>Specializzazione</th><th>Lead Time</th><th>Stato</th><th></th></tr></thead>
-<tbody id="suppliersTable"></tbody></table></div></div>
+<div class="card">
+<div class="card-header"><h3 id="anagTitle">Elenco Clienti</h3><input type="text" placeholder="Cerca..." style="padding:8px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px" id="anagSearch" oninput="renderAnagrafiche()"></div>
+<!-- Clienti panel -->
+<div class="card-body" id="anagClientiPanel"><table><thead><tr><th>Azienda</th><th>Contatto</th><th>Città</th><th>Telefono</th><th>Email</th><th>P.IVA</th><th>Stato</th><th></th></tr></thead>
+<tbody id="clientsTable"></tbody></table></div>
+<!-- Fornitori panel -->
+<div class="card-body" id="anagFornitoriPanel" style="display:none"><table><thead><tr><th>Fornitore</th><th>Contatto</th><th>Specializzazione</th><th>Lead Time</th><th>Stato</th><th></th></tr></thead>
+<tbody id="suppliersTable"></tbody></table></div>
+</div>
 </div>
 
 <!-- ===== FATTURE ===== -->
@@ -199,17 +196,6 @@
 <div class="card"><div class="card-header"><h3>Elenco Fatture</h3></div>
 <div class="card-body"><table><thead><tr><th>N° Fattura</th><th>Cliente</th><th>Data</th><th>Imponibile</th><th>IVA</th><th>Totale</th><th>Stato</th><th></th></tr></thead>
 <tbody id="invoicesTable"></tbody></table></div></div>
-</div>
-
-<!-- ===== BI ===== -->
-<div class="page" id="page-bi">
-<h2 style="margin-bottom:24px">📈 Business Intelligence</h2>
-<div class="charts-grid">
-<div class="card"><div class="card-header"><h3>Trend Fatturato vs Costi</h3></div><div class="card-body"><div class="chart-container"><canvas id="biRevenue"></canvas></div></div></div>
-<div class="card"><div class="card-header"><h3>Margine per Categoria</h3></div><div class="card-body"><div class="chart-container"><canvas id="biMargin"></canvas></div></div></div>
-<div class="card"><div class="card-header"><h3>Segmenti Clienti</h3></div><div class="card-body"><div class="chart-container"><canvas id="biSegments"></canvas></div></div></div>
-<div class="card"><div class="card-header"><h3>Top 10 Prodotti</h3></div><div class="card-body"><div class="chart-container"><canvas id="biTopProducts"></canvas></div></div></div>
-</div>
 </div>
 
 <!-- ===== IMPOSTAZIONI ===== -->
@@ -233,7 +219,7 @@
 
 <div class="setting-card">
 <h3><i class="fas fa-plug" style="color:var(--accent)"></i> Provider Dati</h3>
-<p style="color:var(--text-light);font-size:13px;margin-bottom:16px">Seleziona quale servizio utilizzare per ogni tipo di dato. L'architettura a provider permette di cambiare fonte dati senza modificare il codice.</p>
+<p style="color:var(--text-light);font-size:13px;margin-bottom:16px">Seleziona quale servizio utilizzare per ogni tipo di dato.</p>
 <div class="form-row">
 <div class="form-group"><label>Ricerca Veicolo per Targa</label>
 <select id="settingsPlateProvider">
@@ -271,7 +257,7 @@
 <h3><i class="fas fa-info-circle" style="color:var(--accent)"></i> Informazioni</h3>
 <div style="color:var(--text-light);font-size:13px;line-height:1.8">
 <p><strong>AutoParts Pro</strong> — Catalogo ricambi e gestionale per autoricambi</p>
-<p>Versione: 2.0.0 — API Real Integration</p>
+<p>Versione: 3.0.0 — UX Overhaul</p>
 <p>Limiti free tier: Targhe 10/giorno • Catalogo 100 req/mese</p>
 <p>Cache: risposte API conservate 24h per risparmiare quota</p>
 </div>
@@ -377,7 +363,6 @@
 </div>
 </div>
 
-<!-- MODAL: Aggiungi al magazzino da catalogo -->
 <div class="modal-overlay" id="catalogStockModal">
 <div class="modal" style="max-width:450px">
 <div class="modal-header"><h3>Aggiungi al Magazzino</h3><button class="modal-close" onclick="closeModal('catalogStockModal')">×</button></div>
@@ -397,10 +382,11 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<!-- JS: load order matters (config → db → providers → charts → labor → app) -->
+<!-- JS: load order matters -->
 <script src="js/config.js"></script>
 <script src="js/db.js"></script>
 <script src="js/providers.js"></script>
+<script src="js/pagination.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/labor.js"></script>
 <script src="js/app.js"></script>

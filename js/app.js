@@ -29,31 +29,60 @@ function apiKeyBanner(containerId) {
 
 function handleApiError(err) {
   if (err.message === 'API_KEY_MISSING') {
-    toast('⚠️ Configura la tua API key nelle Impostazioni', 'warning');
+    toast('\u26a0\ufe0f Configura la tua API key nelle Impostazioni', 'warning');
     return;
   }
   if (err.message === 'QUOTA_EXCEEDED') {
-    toast('⚠️ Quota esaurita — i dati mostrati sono dalla cache', 'warning');
+    toast('\u26a0\ufe0f Quota esaurita — i dati mostrati sono dalla cache', 'warning');
     return;
   }
-  toast('❌ Errore API: ' + err.message, 'error');
+  toast('\u274c Errore API: ' + err.message, 'error');
 }
 
 // ============================================================
 //  NAVIGATION
 // ============================================================
+// Track active anagrafiche tab
+let _activeAnagTab = 'clienti';
+
 function showPage(page) {
+  // Backward compatibility for old page names
+  const pageMap = {
+    'ricerca': 'cerca',
+    'catalogo': 'cerca',
+    'crossref': 'cerca',
+    'dashboard': 'analytics',
+    'bi': 'analytics',
+    'clienti': 'anagrafiche',
+    'fornitori': 'anagrafiche'
+  };
+  const actualPage = pageMap[page] || page;
+
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-' + page).classList.add('active');
+  const el = document.getElementById('page-' + actualPage);
+  if (el) el.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('active');
-  
+  document.querySelector(`.nav-item[data-page="${actualPage}"]`)?.classList.add('active');
+
+  // Handle sub-page contexts for backward compat
+  if (page === 'catalogo') {
+    showCatalogArea();
+    loadCatalogManufacturers();
+  } else if (page === 'crossref') {
+    switchCercaTab('crossref');
+  } else if (page === 'clienti') {
+    switchAnagTab('clienti');
+  } else if (page === 'fornitori') {
+    switchAnagTab('fornitori');
+  }
+
+  // Page init functions
   const pageInits = {
-    ricerca: () => { apiKeyBanner('ricercaBanner'); loadVehicleHistory(); },
-    catalogo: () => { apiKeyBanner('catalogoBanner'); loadCatalogManufacturers(); },
-    crossref: () => {},
+    cerca: () => {
+      apiKeyBanner('cercaBanner');
+      loadVehicleHistory();
+    },
     manodopera: () => {
-      // Populate category filter
       const sel = document.getElementById('laborCatFilter');
       if (sel && sel.options.length <= 1) {
         LABOR_CATEGORIES.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
@@ -61,59 +90,121 @@ function showPage(page) {
       document.getElementById('laborCount').textContent = LABOR_TIMES.length;
       initLaborPage();
     },
-    dashboard: initDashboard,
+    analytics: initAnalytics,
     magazzino: () => { renderStock(); renderMovements(); populateMovPartSelect(); },
-    clienti: renderClients,
-    fornitori: renderSuppliers,
+    anagrafiche: () => { renderAnagrafiche(); },
     fatture: renderInvoices,
-    bi: initBI,
     impostazioni: loadSettingsUI
   };
-  (pageInits[page] || (() => {}))();
+  (pageInits[actualPage] || (() => {}))();
+}
+
+// ============================================================
+//  CERCA PAGE — Tab switching
+// ============================================================
+function switchCercaTab(tab, btn) {
+  // Toggle input rows
+  ['targa', 'modello', 'crossref'].forEach(t => {
+    const el = document.getElementById('cerca-' + t);
+    if (el) el.style.display = 'none';
+  });
+  const row = document.getElementById('cerca-' + tab);
+  if (row) row.style.display = 'flex';
+
+  // Toggle tab buttons
+  if (btn) {
+    btn.parentElement.querySelectorAll('.lookup-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  } else {
+    // Find and activate the right tab button
+    document.querySelectorAll('#page-cerca .lookup-tab').forEach(b => {
+      const text = b.textContent.toLowerCase();
+      if ((tab === 'targa' && text.includes('targa')) ||
+          (tab === 'modello' && text.includes('marca')) ||
+          (tab === 'crossref' && text.includes('cross'))) {
+        b.parentElement.querySelectorAll('.lookup-tab').forEach(bb => bb.classList.remove('active'));
+        b.classList.add('active');
+      }
+    });
+  }
+
+  // Toggle result sections
+  document.getElementById('cercaSectionVehicle').style.display = (tab === 'targa') ? '' : 'none';
+  document.getElementById('cercaSectionCatalog').style.display = (tab === 'modello') ? '' : 'none';
+  document.getElementById('cercaSectionCrossref').style.display = (tab === 'crossref') ? '' : 'none';
+}
+
+function showCatalogArea() {
+  document.getElementById('cercaSectionVehicle').style.display = 'none';
+  document.getElementById('cercaSectionCrossref').style.display = 'none';
+  document.getElementById('cercaSectionCatalog').style.display = '';
+}
+
+// ============================================================
+//  ANAGRAFICHE — Tab switching
+// ============================================================
+function switchAnagTab(tab, btn) {
+  _activeAnagTab = tab;
+  // Toggle tabs
+  if (btn) {
+    btn.parentElement.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  } else {
+    document.querySelectorAll('#page-anagrafiche .tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.anag === tab);
+    });
+  }
+  // Toggle panels
+  document.getElementById('anagClientiPanel').style.display = (tab === 'clienti') ? '' : 'none';
+  document.getElementById('anagFornitoriPanel').style.display = (tab === 'fornitori') ? '' : 'none';
+  // Update title
+  document.getElementById('anagTitle').textContent = tab === 'clienti' ? 'Elenco Clienti' : 'Elenco Fornitori';
+  // Update button
+  const btnNew = document.getElementById('btnNewAnag');
+  if (tab === 'clienti') {
+    btnNew.innerHTML = '<i class="fas fa-plus"></i> Nuovo Cliente';
+    btnNew.onclick = () => showClientModal();
+  } else {
+    btnNew.innerHTML = '<i class="fas fa-plus"></i> Nuovo Fornitore';
+    btnNew.onclick = () => showSupplierModal();
+  }
+  // Re-render active tab
+  renderAnagrafiche();
+}
+
+function renderAnagrafiche() {
+  if (_activeAnagTab === 'clienti') renderClients();
+  else renderSuppliers();
 }
 
 // ============================================================
 //  RICERCA VEICOLO (Targa API)
 // ============================================================
-function switchLookup(type, btn) {
-  ['targa', 'modello'].forEach(t => {
-    const el = document.getElementById('lookup-' + t);
-    if (el) el.style.display = 'none';
-  });
-  document.getElementById('lookup-' + type).style.display = 'flex';
-  btn.parentElement.querySelectorAll('.lookup-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-}
-
 async function searchByPlate() {
   const plate = document.getElementById('inputTarga').value.toUpperCase().replace(/\s/g, '');
   if (!plate) { toast('Inserisci una targa'); return; }
-  
+
   const btn = document.getElementById('btnSearchPlate');
-  btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Ricerca in corso (verifica RCA e furto)...';
+  btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Ricerca in corso...';
   btn.disabled = true;
-  
+
+  // Show vehicle results section
+  document.getElementById('cercaSectionVehicle').style.display = '';
+  document.getElementById('cercaSectionCatalog').style.display = 'none';
+  document.getElementById('cercaSectionCrossref').style.display = 'none';
+
   try {
     const data = await cachedApiCall(`plate_${plate}`, () => getPlateProvider().lookup(plate));
-    
-    // Save vehicle to local DB
-    await dbPut('vehicles', {
-      id: plate,
-      plate,
-      data,
-      searchedAt: new Date().toISOString()
-    });
-    
+    await dbPut('vehicles', { id: plate, plate, data, searchedAt: new Date().toISOString() });
     renderPlateResult(plate, data);
     toast('Veicolo trovato!', 'success');
   } catch (err) {
     handleApiError(err);
-    // Try cache fallback
     try {
       const cached = await dbGet('apiCache', `plate_${plate}`);
       if (cached) {
         renderPlateResult(plate, cached.data);
-        toast('⚠️ Dati dalla cache (offline o quota esaurita)', 'warning');
+        toast('\u26a0\ufe0f Dati dalla cache (offline o quota esaurita)', 'warning');
       } else {
         document.getElementById('vehicleResults').innerHTML = `
           <div style="text-align:center;padding:40px;color:var(--text-light)">
@@ -130,30 +221,26 @@ async function searchByPlate() {
 }
 
 function renderPlateResult(plate, data) {
-  // Handle response from Informazioni Targhe (insurance + theft data)
   const v = data || {};
-  const tipoVeicolo = v.descrizioneTipoVeicolo || v.tipoVeicolo || '—';
-  const assicurazione = v.compagniaAssicurativa || '—';
-  const polizza = v.numeroPolizza || '—';
+  const tipoVeicolo = v.descrizioneTipoVeicolo || v.tipoVeicolo || '\u2014';
+  const assicurazione = v.compagniaAssicurativa || '\u2014';
+  const polizza = v.numeroPolizza || '\u2014';
   const assicurato = v.assicurazionePresente === 'true' || v.assicurazionePresente === true;
   const sospesa = v.assicurazioneSospesa === 'true' || v.assicurazioneSospesa === true;
-  const scadenza = v.dataScadenzaPolizza ? v.dataScadenzaPolizza.split('+')[0] : '—';
-  const scadenzaComparto = v.dataScadenzaCompartoPolizza ? v.dataScadenzaCompartoPolizza.split('+')[0] : '—';
-  
-  // Theft info (from submitwiththeftverification)
+  const scadenza = v.dataScadenzaPolizza ? v.dataScadenzaPolizza.split('+')[0] : '\u2014';
+  const scadenzaComparto = v.dataScadenzaCompartoPolizza ? v.dataScadenzaCompartoPolizza.split('+')[0] : '\u2014';
   const theft = v.theftstatus || {};
   const theftFound = theft.found === true;
   const theftDate = theft.dataUpdatedDate || '';
-  
   const assicStatusColor = assicurato ? (sospesa ? 'orange' : 'green') : 'red';
-  const assicStatusText = assicurato ? (sospesa ? '⚠️ Sospesa' : '✅ Assicurato') : '❌ Non assicurato';
-  const theftStatusText = theftFound ? '🚨 SEGNALAZIONE FURTO' : '✅ Nessuna segnalazione furto';
+  const assicStatusText = assicurato ? (sospesa ? '\u26a0\ufe0f Sospesa' : '\u2705 Assicurato') : '\u274c Non assicurato';
+  const theftStatusText = theftFound ? '\ud83d\udea8 SEGNALAZIONE FURTO' : '\u2705 Nessuna segnalazione furto';
   const theftStatusColor = theftFound ? 'red' : 'green';
-  
+
   document.getElementById('vehicleResults').innerHTML = `
     <div class="vehicle-card" style="border-color:var(--accent);max-width:600px">
       <div class="v-header" style="position:relative">
-        <div style="position:absolute;top:12px;right:12px;background:rgba(255,255,255,.15);padding:4px 12px;border-radius:6px;font-size:11px;font-weight:600">🇮🇹 ${plate}</div>
+        <div style="position:absolute;top:12px;right:12px;background:rgba(255,255,255,.15);padding:4px 12px;border-radius:6px;font-size:11px;font-weight:600">\ud83c\uddee\ud83c\uddf9 ${plate}</div>
         <i class="fas fa-car"></i>
         <h4>${tipoVeicolo}</h4>
         <small>Targa: ${plate}</small>
@@ -162,13 +249,13 @@ function renderPlateResult(plate, data) {
         <div class="v-detail"><span>Tipo Veicolo</span><span><strong>${tipoVeicolo}</strong></span></div>
         <div class="v-detail"><span>Stato Assicurazione</span><span style="color:var(--${assicStatusColor})"><strong>${assicStatusText}</strong></span></div>
         <div class="v-detail"><span>Compagnia</span><span><strong>${assicurazione}</strong></span></div>
-        <div class="v-detail"><span>N° Polizza</span><span style="font-family:monospace;font-size:11px">${polizza}</span></div>
+        <div class="v-detail"><span>N\u00b0 Polizza</span><span style="font-family:monospace;font-size:11px">${polizza}</span></div>
         <div class="v-detail"><span>Scadenza Polizza</span><span>${scadenza}</span></div>
         <div class="v-detail"><span>Scadenza Comparto</span><span>${scadenzaComparto}</span></div>
         <div class="v-detail"><span>Stato Furto</span><span style="color:var(--${theftStatusColor})"><strong>${theftStatusText}</strong></span></div>
         ${theftDate ? `<div class="v-detail"><span>Aggiornamento DB Furto</span><span>${theftDate}</span></div>` : ''}
         <div style="margin-top:16px;display:flex;gap:8px;justify-content:center">
-          <button class="btn btn-primary btn-sm" onclick="showPage('catalogo')"><i class="fas fa-cogs"></i> Cerca Ricambi</button>
+          <button class="btn btn-primary btn-sm" onclick="showCatalogArea();loadCatalogManufacturers()"><i class="fas fa-cogs"></i> Cerca Ricambi</button>
           <button class="btn btn-outline btn-sm" onclick="showPage('manodopera')"><i class="fas fa-clock"></i> Tempi Manodopera</button>
         </div>
       </div>
@@ -192,9 +279,9 @@ async function loadVehicleHistory() {
             const d = v.data || {};
             return `<tr>
               <td style="font-family:monospace;font-weight:700">${v.plate}</td>
-              <td>${d.compagniaAssicurativa || '—'}</td>
-              <td>${d.assicurazionePresente === 'true' ? '✅' : '❌'}</td>
-              <td>${v.searchedAt ? new Date(v.searchedAt).toLocaleString('it-IT') : '—'}</td>
+              <td>${d.compagniaAssicurativa || '\u2014'}</td>
+              <td>${d.assicurazionePresente === 'true' ? '\u2705' : '\u274c'}</td>
+              <td>${v.searchedAt ? new Date(v.searchedAt).toLocaleString('it-IT') : '\u2014'}</td>
               <td><button class="btn btn-outline btn-sm" onclick="document.getElementById('inputTarga').value='${v.plate}';searchByPlate()"><i class="fas fa-redo"></i></button></td>
             </tr>`;
           }).join('')}</tbody></table>
@@ -207,13 +294,20 @@ async function loadVehicleHistory() {
 //  CATALOGO RICAMBI (Auto Parts Catalog API)
 // ============================================================
 let catalogState = { level: 'manufacturers', trail: [] };
+let _catalogScroller = null;
+
+function _destroyCatalogScroller() {
+  if (_catalogScroller) { _catalogScroller.destroy(); _catalogScroller = null; }
+}
 
 async function loadCatalogManufacturers() {
+  showCatalogArea();
   catalogState = { level: 'manufacturers', trail: [] };
   updateBreadcrumb();
   const container = document.getElementById('catalogContent');
   container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div><p>Caricamento produttori...</p></div>';
-  
+  _destroyCatalogScroller();
+
   try {
     const data = await cachedApiCall('catalog_manufacturers', () => getPartsProvider().getManufacturers());
     const items = Array.isArray(data) ? data : (data.data || data.manufacturers || []);
@@ -221,12 +315,12 @@ async function loadCatalogManufacturers() {
       container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Nessun produttore trovato. Verifica la tua API key.</p>';
       return;
     }
-    container.innerHTML = `<div class="catalog-grid">${items.map(m => `
-      <div class="catalog-item" onclick="loadCatalogModels(${m.id},'${(m.name||m.title||'').replace(/'/g,"\\'")}')">
-        <i class="fas fa-industry"></i>
-        <h4>${m.name || m.title || 'N/D'}</h4>
-        <small>${m.country || ''}</small>
-      </div>`).join('')}</div>`;
+    container.innerHTML = '<div class="catalog-grid" id="catalogGrid"></div>';
+    _catalogScroller = new InfiniteScroll(document.getElementById('catalogGrid'), (offset, limit) => items.slice(offset, offset + limit), {
+      pageSize: 30,
+      renderItem: m => `<div class="catalog-item" onclick="loadCatalogModels(${m.id},'${(m.name||m.title||'').replace(/'/g,"\\'")}')"><i class="fas fa-industry"></i><h4>${m.name || m.title || 'N/D'}</h4><small>${m.country || ''}</small></div>`,
+      onEmpty: () => { container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Nessun produttore trovato.</p>'; }
+    });
   } catch(err) {
     handleApiError(err);
     container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-light)">
@@ -239,20 +333,22 @@ async function loadCatalogManufacturers() {
 }
 
 async function loadCatalogModels(mfrId, mfrName) {
+  showCatalogArea();
   catalogState = { level: 'models', trail: [{ label: mfrName, action: `loadCatalogManufacturers()` }], mfrId };
   updateBreadcrumb();
   const container = document.getElementById('catalogContent');
   container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div><p>Caricamento modelli...</p></div>';
-  
+  _destroyCatalogScroller();
+
   try {
     const data = await cachedApiCall(`catalog_models_${mfrId}`, () => getPartsProvider().getModels(mfrId));
     const items = Array.isArray(data) ? data : (data.data || data.models || []);
-    container.innerHTML = `<div class="catalog-grid">${items.map(m => `
-      <div class="catalog-item" onclick="loadCatalogTypes(${m.id},'${(m.name||m.title||'').replace(/'/g,"\\'")}')">
-        <i class="fas fa-car"></i>
-        <h4>${m.name || m.title || 'N/D'}</h4>
-        <small>${m.year_from || ''} ${m.year_to ? '- ' + m.year_to : ''}</small>
-      </div>`).join('')}</div>`;
+    container.innerHTML = '<div class="catalog-grid" id="catalogGrid"></div>';
+    _catalogScroller = new InfiniteScroll(document.getElementById('catalogGrid'), (offset, limit) => items.slice(offset, offset + limit), {
+      pageSize: 30,
+      renderItem: m => `<div class="catalog-item" onclick="loadCatalogTypes(${m.id},'${(m.name||m.title||'').replace(/'/g,"\\'")}')"><i class="fas fa-car"></i><h4>${m.name || m.title || 'N/D'}</h4><small>${m.year_from || ''} ${m.year_to ? '- ' + m.year_to : ''}</small></div>`,
+      onEmpty: () => { container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Nessun modello trovato.</p>'; }
+    });
   } catch(err) {
     handleApiError(err);
     container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Errore nel caricamento dei modelli.</p>';
@@ -260,6 +356,7 @@ async function loadCatalogModels(mfrId, mfrName) {
 }
 
 async function loadCatalogTypes(modelId, modelName) {
+  showCatalogArea();
   const prevTrail = [...catalogState.trail];
   catalogState.trail = [...prevTrail, { label: modelName, action: `loadCatalogModels(${catalogState.mfrId},'${prevTrail[0]?.label || ''}')` }];
   catalogState.level = 'types';
@@ -267,16 +364,17 @@ async function loadCatalogTypes(modelId, modelName) {
   updateBreadcrumb();
   const container = document.getElementById('catalogContent');
   container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div><p>Caricamento versioni...</p></div>';
-  
+  _destroyCatalogScroller();
+
   try {
     const data = await cachedApiCall(`catalog_types_${modelId}`, () => getPartsProvider().getTypes(modelId));
     const items = Array.isArray(data) ? data : (data.data || data.types || []);
-    container.innerHTML = `<div class="catalog-grid">${items.map(t => `
-      <div class="catalog-item" onclick="loadCatalogCategories(${t.id},'${(t.name||t.title||'').replace(/'/g,"\\'")}')">
-        <i class="fas fa-car-side"></i>
-        <h4>${t.name || t.title || 'N/D'}</h4>
-        <small>${t.year_from || ''} ${t.year_to ? '- ' + t.year_to : ''} ${t.engine || ''}</small>
-      </div>`).join('')}</div>`;
+    container.innerHTML = '<div class="catalog-grid" id="catalogGrid"></div>';
+    _catalogScroller = new InfiniteScroll(document.getElementById('catalogGrid'), (offset, limit) => items.slice(offset, offset + limit), {
+      pageSize: 30,
+      renderItem: t => `<div class="catalog-item" onclick="loadCatalogCategories(${t.id},'${(t.name||t.title||'').replace(/'/g,"\\'")}')"><i class="fas fa-car-side"></i><h4>${t.name || t.title || 'N/D'}</h4><small>${t.year_from || ''} ${t.year_to ? '- ' + t.year_to : ''} ${t.engine || ''}</small></div>`,
+      onEmpty: () => { container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Nessuna versione trovata.</p>'; }
+    });
   } catch(err) {
     handleApiError(err);
     container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Errore nel caricamento delle versioni.</p>';
@@ -284,8 +382,8 @@ async function loadCatalogTypes(modelId, modelName) {
 }
 
 async function loadCatalogCategories(vehicleId, typeName) {
+  showCatalogArea();
   const prevTrail = [...catalogState.trail];
-  const mfrId = catalogState.mfrId;
   const modelId = catalogState.modelId;
   catalogState.trail = [...prevTrail, { label: typeName, action: `loadCatalogTypes(${modelId},'${prevTrail.length > 1 ? prevTrail[1].label : ''}')` }];
   catalogState.level = 'categories';
@@ -293,21 +391,23 @@ async function loadCatalogCategories(vehicleId, typeName) {
   updateBreadcrumb();
   const container = document.getElementById('catalogContent');
   container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div><p>Caricamento categorie ricambi...</p></div>';
-  
+  _destroyCatalogScroller();
+
   try {
     const data = await cachedApiCall(`catalog_categories_${vehicleId}`, () => getPartsProvider().getCategories(vehicleId));
     const items = Array.isArray(data) ? data : (data.data || data.categories || []);
     const icons = { 'Brake': 'fa-compact-disc', 'Filter': 'fa-filter', 'Engine': 'fa-cog', 'Suspension': 'fa-arrows-alt-v', 'Body': 'fa-car-side', 'Electric': 'fa-bolt', 'Air': 'fa-snowflake', 'Transmission': 'fa-gears' };
-    container.innerHTML = `<div class="catalog-grid">${items.map(c => {
-      let icon = 'fa-box';
-      const name = (c.name || c.title || '').toLowerCase();
-      for (const [k, v] of Object.entries(icons)) { if (name.includes(k.toLowerCase())) { icon = v; break; } }
-      return `<div class="catalog-item" onclick="loadCatalogArticles(${c.id},'${(c.name||c.title||'').replace(/'/g,"\\'")}')">
-        <i class="fas ${icon}"></i>
-        <h4>${c.name || c.title || 'N/D'}</h4>
-        <small>${c.count ? c.count + ' articoli' : ''}</small>
-      </div>`;
-    }).join('')}</div>`;
+    container.innerHTML = '<div class="catalog-grid" id="catalogGrid"></div>';
+    _catalogScroller = new InfiniteScroll(document.getElementById('catalogGrid'), (offset, limit) => items.slice(offset, offset + limit), {
+      pageSize: 30,
+      renderItem: c => {
+        let icon = 'fa-box';
+        const name = (c.name || c.title || '').toLowerCase();
+        for (const [k, v] of Object.entries(icons)) { if (name.includes(k.toLowerCase())) { icon = v; break; } }
+        return `<div class="catalog-item" onclick="loadCatalogArticles(${c.id},'${(c.name||c.title||'').replace(/'/g,"\\'")}')"><i class="fas ${icon}"></i><h4>${c.name || c.title || 'N/D'}</h4><small>${c.count ? c.count + ' articoli' : ''}</small></div>`;
+      },
+      onEmpty: () => { container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Nessuna categoria trovata.</p>'; }
+    });
   } catch(err) {
     handleApiError(err);
     container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Errore nel caricamento delle categorie.</p>';
@@ -315,13 +415,15 @@ async function loadCatalogCategories(vehicleId, typeName) {
 }
 
 async function loadCatalogArticles(catId, catName) {
+  showCatalogArea();
   const prevTrail = [...catalogState.trail];
   catalogState.trail = [...prevTrail, { label: catName, action: `loadCatalogCategories(${catalogState.vehicleId},'${prevTrail.length > 2 ? prevTrail[2].label : ''}')` }];
   catalogState.level = 'articles';
   updateBreadcrumb();
   const container = document.getElementById('catalogContent');
   container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div><p>Caricamento ricambi...</p></div>';
-  
+  _destroyCatalogScroller();
+
   try {
     const data = await cachedApiCall(`catalog_articles_${catId}_${catalogState.vehicleId}`, () => getPartsProvider().getArticles(catId, catalogState.vehicleId));
     const items = Array.isArray(data) ? data : (data.data || data.articles || []);
@@ -329,8 +431,10 @@ async function loadCatalogArticles(catId, catName) {
       container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Nessun ricambio trovato in questa categoria.</p>';
       return;
     }
-    container.innerHTML = `<div class="parts-grid">${items.map(a => `
-      <div class="part-card">
+    container.innerHTML = '<div class="parts-grid" id="catalogGrid"></div>';
+    _catalogScroller = new InfiniteScroll(document.getElementById('catalogGrid'), (offset, limit) => items.slice(offset, offset + limit), {
+      pageSize: 30,
+      renderItem: a => `<div class="part-card">
         <div class="p-top">
           ${a.image ? `<div class="p-icon"><img src="${a.image}" alt="" style="width:48px;height:48px;object-fit:contain;border-radius:6px" onerror="this.outerHTML='<i class=\\'fas fa-cog\\'></i>'"></div>` : `<div class="p-icon"><i class="fas fa-cog"></i></div>`}
           <div class="p-info">
@@ -342,12 +446,13 @@ async function loadCatalogArticles(catId, catName) {
         ${(a.cross_references || a.oe_numbers || []).length ? `<div class="p-cross">${(a.cross_references || a.oe_numbers || []).slice(0, 5).map(c => `<span class="cross-tag">${typeof c === 'string' ? c : (c.number || c.code || '')}</span>`).join('')}</div>` : ''}
         <div class="p-bottom">
           <div>
-            ${a.price ? `<div class="p-price">€ ${parseFloat(a.price).toFixed(2)}</div>` : ''}
+            ${a.price ? `<div class="p-price">\u20ac ${parseFloat(a.price).toFixed(2)}</div>` : ''}
             ${a.availability ? `<div class="p-stock in">${a.availability}</div>` : ''}
           </div>
           <button class="btn btn-orange btn-sm" onclick="addArticleToStock('${(a.article_number||a.code||'').replace(/'/g,"\\'")}','${(a.name||a.title||a.description||'Ricambio').replace(/'/g,"\\'")}')"><i class="fas fa-plus"></i> Magazzino</button>
         </div>
-      </div>`).join('')}</div>`;
+      </div>`
+    });
   } catch(err) {
     handleApiError(err);
     container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Errore nel caricamento dei ricambi.</p>';
@@ -368,7 +473,7 @@ function updateBreadcrumb() {
   }
   let html = `<span onclick="loadCatalogManufacturers()"><i class="fas fa-home"></i> Produttori</span>`;
   catalogState.trail.forEach((t, i) => {
-    html += `<span class="sep">›</span>`;
+    html += `<span class="sep">\u203a</span>`;
     if (i < catalogState.trail.length - 1) {
       html += `<span onclick="${t.action}">${t.label}</span>`;
     } else {
@@ -378,14 +483,16 @@ function updateBreadcrumb() {
   bc.innerHTML = html;
 }
 
-// For marca/modello lookup in ricerca
+// ============================================================
+//  CERCA — Marca/Modello lookup
+// ============================================================
 async function loadModelsForMfr() {
   const mfrId = document.getElementById('selMarca').value;
   const selModello = document.getElementById('selModello');
   selModello.innerHTML = '<option value="">— Caricamento... —</option>';
   document.getElementById('selType').innerHTML = '<option value="">— Versione —</option>';
   if (!mfrId) { selModello.innerHTML = '<option value="">— Modello —</option>'; return; }
-  
+
   try {
     const data = await cachedApiCall(`catalog_models_${mfrId}`, () => getPartsProvider().getModels(mfrId));
     const items = Array.isArray(data) ? data : (data.data || data.models || []);
@@ -417,7 +524,7 @@ async function loadTypesForModel() {
 function syncComboLabel(selId, inputId) {
   const sel = document.getElementById(selId);
   const inp = document.getElementById(inputId);
-  if (sel && inp) inp.value = sel.selectedOptions[0]?.text?.startsWith('—') ? '' : (sel.selectedOptions[0]?.text || '');
+  if (sel && inp) inp.value = sel.selectedOptions[0]?.text?.startsWith('\u2014') ? '' : (sel.selectedOptions[0]?.text || '');
 }
 
 async function searchByModel() {
@@ -425,12 +532,12 @@ async function searchByModel() {
   const modelId = document.getElementById('selModello').value;
   const typeId = document.getElementById('selType').value;
   if (!mfrId) { toast('Seleziona una marca'); return; }
-  showPage('catalogo');
+
+  showCatalogArea();
   const mfrName = document.getElementById('selMarca').selectedOptions[0]?.text || '';
   const modelName = document.getElementById('selModello').selectedOptions[0]?.text || '';
-  
+
   if (typeId) {
-    // Go directly to categories for this vehicle
     catalogState.mfrId = parseInt(mfrId);
     catalogState.vehicleId = parseInt(typeId);
     const typeName = document.getElementById('selType').selectedOptions[0]?.text || '';
@@ -449,7 +556,6 @@ async function searchByModel() {
   }
 }
 
-// Load manufacturers for the ricerca dropdown too
 async function loadMfrDropdown() {
   const sel = document.getElementById('selMarca');
   try {
@@ -468,16 +574,21 @@ async function loadMfrDropdown() {
 async function searchCrossRef() {
   const code = document.getElementById('crossrefInput').value.trim();
   if (!code) { toast('Inserisci un codice OEM'); return; }
-  
+
+  // Show crossref results section
+  document.getElementById('cercaSectionVehicle').style.display = 'none';
+  document.getElementById('cercaSectionCatalog').style.display = 'none';
+  document.getElementById('cercaSectionCrossref').style.display = '';
+
   const container = document.getElementById('crossrefResults');
   container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div><p>Ricerca cross-reference...</p></div>';
-  
+
   try {
     const d = await openDB();
     const tx = d.transaction('apiCache', 'readonly');
     const store = tx.objectStore('apiCache');
     const all = await new Promise((res, rej) => { const r = store.getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
-    
+
     const matches = [];
     all.filter(c => c.key.startsWith('catalog_articles_')).forEach(cached => {
       const items = Array.isArray(cached.data) ? cached.data : (cached.data?.data || cached.data?.articles || []);
@@ -489,21 +600,21 @@ async function searchCrossRef() {
         }
       });
     });
-    
+
     if (matches.length) {
       container.innerHTML = `<h3 style="margin-bottom:16px">${matches.length} risultato/i per "${code}"</h3>` +
         matches.map(a => `<div class="crossref-item">
           <div class="cr-brand">${a.brand || a.manufacturer || 'N/D'}</div>
           <div class="cr-code">${a.article_number || a.code || 'N/D'}</div>
           <div style="flex:1"><strong>${a.name || a.title || a.description || 'Ricambio'}</strong></div>
-          ${a.price ? `<div style="font-weight:700;color:var(--accent)">€ ${parseFloat(a.price).toFixed(2)}</div>` : ''}
+          ${a.price ? `<div style="font-weight:700;color:var(--accent)">\u20ac ${parseFloat(a.price).toFixed(2)}</div>` : ''}
         </div>`).join('');
     } else {
       container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-light)">
         <i class="fas fa-search" style="font-size:48px;margin-bottom:16px;opacity:.3"></i>
         <h3>Nessun risultato nella cache locale</h3>
         <p>Naviga il Catalogo Ricambi per popolare la cache, poi riprova la cross-reference.</p>
-        <button class="btn btn-primary" style="margin-top:16px" onclick="showPage('catalogo')"><i class="fas fa-cogs"></i> Vai al Catalogo</button>
+        <button class="btn btn-primary" style="margin-top:16px" onclick="showCatalogArea();loadCatalogManufacturers()"><i class="fas fa-cogs"></i> Vai al Catalogo</button>
       </div>`;
     }
   } catch(e) {
@@ -512,49 +623,66 @@ async function searchCrossRef() {
 }
 
 // ============================================================
-//  MAGAZZINO (IndexedDB)
+//  MAGAZZINO (IndexedDB + InfiniteScroll)
 // ============================================================
+let _stockScroller = null;
+let _movScroller = null;
+
 async function renderStock() {
   const q = (document.getElementById('stockSearch')?.value || '').toLowerCase();
   const items = await dbGetAll('inventory');
   let filtered = items;
   if (q) filtered = filtered.filter(p => (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q));
-  
+
   const inStock = items.filter(p => p.stock > (p.minStock || 0)).length;
   const lowStock = items.filter(p => p.stock > 0 && p.stock <= (p.minStock || 0)).length;
   const outStock = items.filter(p => p.stock === 0).length;
-  
+
   document.getElementById('totalSkus').textContent = items.length;
   document.getElementById('inStockCount').textContent = inStock;
   document.getElementById('lowStockCount').textContent = lowStock;
   document.getElementById('outStockCount').textContent = outStock;
-  
-  document.getElementById('stockTable').innerHTML = filtered.length ? filtered.map(p => {
-    const sc = p.stock === 0 ? 'red' : p.stock <= (p.minStock || 0) ? 'orange' : 'green';
-    const st = p.stock === 0 ? 'Esaurito' : p.stock <= (p.minStock || 0) ? 'Sotto scorta' : 'Disponibile';
-    return `<tr>
-      <td style="font-family:monospace">${p.code || '—'}</td>
-      <td>${p.name}</td>
-      <td>${p.category || '—'}</td>
-      <td><strong>${p.stock || 0}</strong></td>
-      <td>${p.minStock || 0}</td>
-      <td><span class="status ${sc}">${st}</span></td>
-      <td>${p.lastMovement || '—'}</td>
-      <td><button class="btn btn-outline btn-sm" onclick="deleteStockItem(${p.id})"><i class="fas fa-trash"></i></button></td>
-    </tr>`;
-  }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text-light);padding:32px">Nessun articolo in magazzino. Aggiungi il primo!</td></tr>';
+
+  const tbody = document.getElementById('stockTable');
+  tbody.innerHTML = '';
+  if (_stockScroller) { _stockScroller.destroy(); _stockScroller = null; }
+
+  _stockScroller = new InfiniteScroll(tbody, (offset, limit) => filtered.slice(offset, offset + limit), {
+    pageSize: 30,
+    renderItem: p => {
+      const sc = p.stock === 0 ? 'red' : p.stock <= (p.minStock || 0) ? 'orange' : 'green';
+      const st = p.stock === 0 ? 'Esaurito' : p.stock <= (p.minStock || 0) ? 'Sotto scorta' : 'Disponibile';
+      return `<tr>
+        <td style="font-family:monospace">${p.code || '\u2014'}</td>
+        <td>${p.name}</td>
+        <td>${p.category || '\u2014'}</td>
+        <td><strong>${p.stock || 0}</strong></td>
+        <td>${p.minStock || 0}</td>
+        <td><span class="status ${sc}">${st}</span></td>
+        <td>${p.lastMovement || '\u2014'}</td>
+        <td><button class="btn btn-outline btn-sm" onclick="deleteStockItem(${p.id})"><i class="fas fa-trash"></i></button></td>
+      </tr>`;
+    },
+    onEmpty: () => { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-light);padding:32px">Nessun articolo in magazzino. Aggiungi il primo!</td></tr>'; }
+  });
 }
 
 async function renderMovements() {
   const movements = await dbGetAll('movements');
   const sorted = movements.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  document.getElementById('movementsTable').innerHTML = sorted.length ? sorted.slice(0, 20).map(m =>
-    `<tr><td>${m.date}</td><td style="font-family:monospace">${m.code || '—'}</td><td><span class="status ${m.type === 'in' ? 'green' : 'orange'}">${m.type === 'in' ? '↓ Carico' : '↑ Scarico'}</span></td><td>${m.qty}</td><td>${m.note || '—'}</td></tr>`
-  ).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-light);padding:24px">Nessun movimento registrato</td></tr>';
+
+  const tbody = document.getElementById('movementsTable');
+  tbody.innerHTML = '';
+  if (_movScroller) { _movScroller.destroy(); _movScroller = null; }
+
+  _movScroller = new InfiniteScroll(tbody, (offset, limit) => sorted.slice(offset, offset + limit), {
+    pageSize: 30,
+    renderItem: m => `<tr><td>${m.date}</td><td style="font-family:monospace">${m.code || '\u2014'}</td><td><span class="status ${m.type === 'in' ? 'green' : 'orange'}">${m.type === 'in' ? '\u2193 Carico' : '\u2191 Scarico'}</span></td><td>${m.qty}</td><td>${m.note || '\u2014'}</td></tr>`,
+    onEmpty: () => { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-light);padding:24px">Nessun movimento registrato</td></tr>'; }
+  });
 }
 
 async function populateMovPartSelect() {
-  // Set up autocomplete on movement modal input
   const input = document.getElementById('movPartInput');
   if (input && !input._acSetup) {
     input._acSetup = true;
@@ -562,7 +690,7 @@ async function populateMovPartSelect() {
       async getSuggestions(q) {
         const items = await dbGetAll('inventory');
         return items.filter(p => (p.code||'').toLowerCase().includes(q.toLowerCase()) || (p.name||'').toLowerCase().includes(q.toLowerCase()))
-          .map(p => ({ label: `<strong>${p.code||'N/D'}</strong> — ${p.name}`, value: `${p.code||'N/D'} — ${p.name}`, id: p.id }));
+          .map(p => ({ label: `<strong>${p.code||'N/D'}</strong> \u2014 ${p.name}`, value: `${p.code||'N/D'} \u2014 ${p.name}`, id: p.id }));
       },
       onSelect(item) {
         document.getElementById('movPart').value = item.id;
@@ -571,25 +699,22 @@ async function populateMovPartSelect() {
   }
 }
 
-function showMovementModal() {
-  populateMovPartSelect();
-  openModal('movementModal');
-}
+function showMovementModal() { populateMovPartSelect(); openModal('movementModal'); }
 
 async function saveMovement() {
   const partId = parseInt(document.getElementById('movPart').value);
   const type = document.getElementById('movType').value;
   const qty = parseInt(document.getElementById('movQty').value);
   const note = document.getElementById('movNote').value;
-  
+
   const p = await dbGet('inventory', partId);
   if (!p) { toast('Articolo non trovato', 'error'); return; }
-  
+
   if (type === 'in') p.stock = (p.stock || 0) + qty;
   else p.stock = Math.max(0, (p.stock || 0) - qty);
   p.lastMovement = new Date().toISOString().slice(0, 10);
   await dbPut('inventory', p);
-  
+
   await dbPut('movements', {
     id: Date.now(),
     date: new Date().toISOString().slice(0, 10),
@@ -600,7 +725,7 @@ async function saveMovement() {
     qty,
     note
   });
-  
+
   closeModal('movementModal');
   renderStock();
   renderMovements();
@@ -613,7 +738,7 @@ async function saveStockItem() {
   const code = document.getElementById('stkCode').value.trim();
   const name = document.getElementById('stkName').value.trim();
   if (!code || !name) { toast('Compila codice e descrizione'); return; }
-  
+
   await dbPut('inventory', {
     id: Date.now(),
     code,
@@ -624,7 +749,7 @@ async function saveStockItem() {
     minStock: parseInt(document.getElementById('stkMin').value) || 5,
     lastMovement: new Date().toISOString().slice(0, 10)
   });
-  
+
   closeModal('stockModal');
   document.getElementById('stkCode').value = '';
   document.getElementById('stkName').value = '';
@@ -664,28 +789,36 @@ async function confirmAddArticleToStock() {
 }
 
 // ============================================================
-//  CLIENTI (IndexedDB)
+//  CLIENTI (IndexedDB + InfiniteScroll)
 // ============================================================
+let _clientsScroller = null;
+
 async function renderClients() {
-  const q = (document.getElementById('clientSearch')?.value || '').toLowerCase();
+  const q = (document.getElementById('anagSearch')?.value || '').toLowerCase();
   let clients = await dbGetAll('clients');
   if (q) clients = clients.filter(c => (c.company || '').toLowerCase().includes(q) || (c.contact || '').toLowerCase().includes(q) || (c.city || '').toLowerCase().includes(q));
-  
-  document.getElementById('clientsTable').innerHTML = clients.length ? clients.map(c =>
-    `<tr>
+
+  const tbody = document.getElementById('clientsTable');
+  tbody.innerHTML = '';
+  if (_clientsScroller) { _clientsScroller.destroy(); _clientsScroller = null; }
+
+  _clientsScroller = new InfiniteScroll(tbody, (offset, limit) => clients.slice(offset, offset + limit), {
+    pageSize: 30,
+    renderItem: c => `<tr>
       <td><strong>${c.company}</strong></td>
-      <td>${c.contact || '—'}</td>
-      <td>${c.city || '—'}</td>
-      <td>${c.phone || '—'}</td>
-      <td>${c.email || '—'}</td>
-      <td style="font-family:monospace;font-size:11px">${c.piva || '—'}</td>
+      <td>${c.contact || '\u2014'}</td>
+      <td>${c.city || '\u2014'}</td>
+      <td>${c.phone || '\u2014'}</td>
+      <td>${c.email || '\u2014'}</td>
+      <td style="font-family:monospace;font-size:11px">${c.piva || '\u2014'}</td>
       <td><span class="status green">${c.status || 'attivo'}</span></td>
       <td>
         <button class="btn btn-outline btn-sm" onclick="editClient(${c.id})"><i class="fas fa-edit"></i></button>
         <button class="btn btn-outline btn-sm" onclick="deleteClient(${c.id})"><i class="fas fa-trash"></i></button>
       </td>
-    </tr>`
-  ).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text-light);padding:32px">Nessun cliente. Aggiungi il primo!</td></tr>';
+    </tr>`,
+    onEmpty: () => { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-light);padding:32px">Nessun cliente. Aggiungi il primo!</td></tr>'; }
+  });
 }
 
 function showClientModal(editing) {
@@ -713,7 +846,7 @@ async function editClient(id) {
 async function saveClient() {
   const company = document.getElementById('cliCompany').value.trim();
   if (!company) { toast('Inserisci la ragione sociale'); return; }
-  
+
   const editId = document.getElementById('cliEditId').value;
   const data = {
     id: editId ? parseInt(editId) : Date.now(),
@@ -726,12 +859,12 @@ async function saveClient() {
     status: 'attivo',
     createdAt: editId ? undefined : new Date().toISOString()
   };
-  
+
   if (editId) {
     const existing = await dbGet('clients', parseInt(editId));
     if (existing) data.createdAt = existing.createdAt;
   }
-  
+
   await dbPut('clients', data);
   closeModal('clientModal');
   renderClients();
@@ -746,22 +879,31 @@ async function deleteClient(id) {
 }
 
 // ============================================================
-//  FORNITORI (IndexedDB)
+//  FORNITORI (IndexedDB + InfiniteScroll)
 // ============================================================
+let _suppliersScroller = null;
+
 async function renderSuppliers() {
-  const q = (document.getElementById('supplierSearch')?.value || '').toLowerCase();
+  const q = (document.getElementById('anagSearch')?.value || '').toLowerCase();
   let suppliers = await dbGetAll('suppliers');
   if (q) suppliers = suppliers.filter(s => (s.name||'').toLowerCase().includes(q) || (s.contact||'').toLowerCase().includes(q) || (s.spec||'').toLowerCase().includes(q));
-  document.getElementById('suppliersTable').innerHTML = suppliers.length ? suppliers.map(s =>
-    `<tr>
+
+  const tbody = document.getElementById('suppliersTable');
+  tbody.innerHTML = '';
+  if (_suppliersScroller) { _suppliersScroller.destroy(); _suppliersScroller = null; }
+
+  _suppliersScroller = new InfiniteScroll(tbody, (offset, limit) => suppliers.slice(offset, offset + limit), {
+    pageSize: 30,
+    renderItem: s => `<tr>
       <td><strong>${s.name}</strong></td>
-      <td>${s.contact || '—'}<br><small>${s.email || ''}</small></td>
-      <td>${s.spec || '—'}</td>
-      <td>${s.lead || '—'}</td>
+      <td>${s.contact || '\u2014'}<br><small>${s.email || ''}</small></td>
+      <td>${s.spec || '\u2014'}</td>
+      <td>${s.lead || '\u2014'}</td>
       <td><span class="status green">${s.status || 'attivo'}</span></td>
       <td><button class="btn btn-outline btn-sm" onclick="deleteSupplier(${s.id})"><i class="fas fa-trash"></i></button></td>
-    </tr>`
-  ).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:32px">Nessun fornitore. Aggiungi il primo!</td></tr>';
+    </tr>`,
+    onEmpty: () => { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:32px">Nessun fornitore. Aggiungi il primo!</td></tr>'; }
+  });
 }
 
 function showSupplierModal() { openModal('supplierModal'); }
@@ -769,7 +911,7 @@ function showSupplierModal() { openModal('supplierModal'); }
 async function saveSupplier() {
   const name = document.getElementById('supName').value.trim();
   if (!name) { toast('Inserisci il nome del fornitore'); return; }
-  
+
   await dbPut('suppliers', {
     id: Date.now(),
     name,
@@ -781,7 +923,7 @@ async function saveSupplier() {
     status: 'attivo',
     createdAt: new Date().toISOString()
   });
-  
+
   closeModal('supplierModal');
   ['supName', 'supContact', 'supSpec', 'supLead', 'supEmail', 'supPhone'].forEach(id => document.getElementById(id).value = '');
   renderSuppliers();
@@ -796,33 +938,43 @@ async function deleteSupplier(id) {
 }
 
 // ============================================================
-//  FATTURAZIONE (IndexedDB)
+//  FATTURAZIONE (IndexedDB + InfiniteScroll)
 // ============================================================
+let _invoicesScroller = null;
+
 async function renderInvoices() {
   const invoices = await dbGetAll('invoices');
   const sorted = invoices.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  
+
   document.getElementById('invPaid').textContent = invoices.filter(i => i.status === 'Pagata').length;
   document.getElementById('invSent').textContent = invoices.filter(i => i.status === 'Emessa').length;
   document.getElementById('invPending').textContent = invoices.filter(i => i.status === 'In scadenza').length;
   document.getElementById('invOverdue').textContent = invoices.filter(i => i.status === 'Scaduta').length;
-  
-  document.getElementById('invoicesTable').innerHTML = sorted.length ? sorted.map(inv => {
-    const sc = inv.status === 'Pagata' ? 'green' : inv.status === 'Emessa' ? 'blue' : inv.status === 'In scadenza' ? 'orange' : 'red';
-    return `<tr>
-      <td><strong>${inv.number}</strong></td>
-      <td>${inv.client}</td>
-      <td>${inv.date}</td>
-      <td>€ ${(inv.amount || 0).toFixed(2)}</td>
-      <td>€ ${(inv.vat || 0).toFixed(2)}</td>
-      <td><strong>€ ${(inv.total || 0).toFixed(2)}</strong></td>
-      <td><span class="status ${sc}">${inv.status}</span></td>
-      <td>
-        <button class="btn btn-outline btn-sm" onclick="viewInvoice(${inv.id})"><i class="fas fa-eye"></i></button>
-        <button class="btn btn-outline btn-sm" onclick="deleteInvoice(${inv.id})"><i class="fas fa-trash"></i></button>
-      </td>
-    </tr>`;
-  }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text-light);padding:32px">Nessuna fattura. Crea la prima!</td></tr>';
+
+  const tbody = document.getElementById('invoicesTable');
+  tbody.innerHTML = '';
+  if (_invoicesScroller) { _invoicesScroller.destroy(); _invoicesScroller = null; }
+
+  _invoicesScroller = new InfiniteScroll(tbody, (offset, limit) => sorted.slice(offset, offset + limit), {
+    pageSize: 30,
+    renderItem: inv => {
+      const sc = inv.status === 'Pagata' ? 'green' : inv.status === 'Emessa' ? 'blue' : inv.status === 'In scadenza' ? 'orange' : 'red';
+      return `<tr>
+        <td><strong>${inv.number}</strong></td>
+        <td>${inv.client}</td>
+        <td>${inv.date}</td>
+        <td>\u20ac ${(inv.amount || 0).toFixed(2)}</td>
+        <td>\u20ac ${(inv.vat || 0).toFixed(2)}</td>
+        <td><strong>\u20ac ${(inv.total || 0).toFixed(2)}</strong></td>
+        <td><span class="status ${sc}">${inv.status}</span></td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick="viewInvoice(${inv.id})"><i class="fas fa-eye"></i></button>
+          <button class="btn btn-outline btn-sm" onclick="deleteInvoice(${inv.id})"><i class="fas fa-trash"></i></button>
+        </td>
+      </tr>`;
+    },
+    onEmpty: () => { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-light);padding:32px">Nessuna fattura. Crea la prima!</td></tr>'; }
+  });
 }
 
 async function showInvoiceCreator() {
@@ -830,7 +982,7 @@ async function showInvoiceCreator() {
   document.getElementById('invoiceModalTitle').textContent = 'Nuova Fattura';
   document.getElementById('invoiceModalSave').style.display = '';
   document.getElementById('invoiceModalPrint').style.display = 'none';
-  
+
   const nextNum = (await dbGetAll('invoices')).length + 1;
   document.getElementById('invoiceModalBody').innerHTML = `
     <div class="form-row">
@@ -853,7 +1005,7 @@ async function showInvoiceCreator() {
     <div style="margin-bottom:16px">
       <label style="display:block;font-size:12px;font-weight:600;color:var(--text-light);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Righe Fattura</label>
       <table style="width:100%;font-size:13px" id="invLinesTable">
-        <thead><tr><th>Descrizione</th><th style="width:70px">Q.tà</th><th style="width:100px">Prezzo Unit.</th><th style="width:90px">Totale</th><th style="width:30px"></th></tr></thead>
+        <thead><tr><th>Descrizione</th><th style="width:70px">Q.t\u00e0</th><th style="width:100px">Prezzo Unit.</th><th style="width:90px">Totale</th><th style="width:30px"></th></tr></thead>
         <tbody id="invLines"></tbody>
       </table>
       <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="addInvoiceLine()"><i class="fas fa-plus"></i> Aggiungi riga</button>
@@ -863,19 +1015,18 @@ async function showInvoiceCreator() {
       <div></div>
     </div>
     <div style="text-align:right;font-size:14px;color:var(--text-light);margin-top:8px" id="invTotalPreview">
-      Imponibile: € 0.00 | IVA: € 0.00 | <strong style="font-size:18px;color:var(--accent)">Totale: € 0.00</strong>
+      Imponibile: \u20ac 0.00 | IVA: \u20ac 0.00 | <strong style="font-size:18px;color:var(--accent)">Totale: \u20ac 0.00</strong>
     </div>`;
-  
-  addInvoiceLine(); // start with one line
-  
-  // Autocomplete on invoice client
+
+  addInvoiceLine();
+
   new Autocomplete('invClient', {
     async getSuggestions(q) {
       const clients = await dbGetAll('clients');
       return clients.filter(c => (c.company||'').toLowerCase().includes(q.toLowerCase())).map(c => ({ label: c.company, value: c.company }));
     }
   });
-  
+
   openModal('invoiceModal');
 }
 
@@ -888,7 +1039,7 @@ function addInvoiceLine() {
     <td><input type="text" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px" placeholder="Descrizione" data-field="desc"></td>
     <td><input type="number" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px" value="1" min="1" data-field="qty" oninput="updateInvTotals()"></td>
     <td><input type="number" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px" step="0.01" min="0" placeholder="0.00" data-field="price" oninput="updateInvTotals()"></td>
-    <td style="text-align:right;font-weight:600" data-field="lineTotal">€ 0.00</td>
+    <td style="text-align:right;font-weight:600" data-field="lineTotal">\u20ac 0.00</td>
     <td><button class="btn btn-sm" style="padding:4px 8px;color:var(--red);background:none;border:none;cursor:pointer" onclick="removeInvoiceLine(${idx})"><i class="fas fa-times"></i></button></td>`;
   document.getElementById('invLines').appendChild(row);
 }
@@ -918,13 +1069,13 @@ function updateInvTotals() {
     const price = parseFloat(row.querySelector('[data-field="price"]')?.value) || 0;
     const lineTotal = qty * price;
     const td = row.querySelector('[data-field="lineTotal"]');
-    if (td) td.textContent = `€ ${lineTotal.toFixed(2)}`;
+    if (td) td.textContent = `\u20ac ${lineTotal.toFixed(2)}`;
     amount += lineTotal;
   });
   const vatRate = parseFloat(document.getElementById('invVatRate')?.value) || 22;
   const vat = amount * vatRate / 100;
   const el = document.getElementById('invTotalPreview');
-  if (el) el.innerHTML = `Imponibile: € ${amount.toFixed(2)} | IVA: € ${vat.toFixed(2)} | <strong style="font-size:18px;color:var(--accent)">Totale: € ${(amount + vat).toFixed(2)}</strong>`;
+  if (el) el.innerHTML = `Imponibile: \u20ac ${amount.toFixed(2)} | IVA: \u20ac ${vat.toFixed(2)} | <strong style="font-size:18px;color:var(--accent)">Totale: \u20ac ${(amount + vat).toFixed(2)}</strong>`;
 }
 
 async function saveInvoice() {
@@ -933,11 +1084,11 @@ async function saveInvoice() {
   const lines = getInvoiceLines();
   const amount = lines.reduce((s, l) => s + l.total, 0);
   if (!amount) { toast('Inserisci almeno una riga con importo'); return; }
-  
+
   const vatRate = parseFloat(document.getElementById('invVatRate').value) || 22;
   const vat = +(amount * vatRate / 100).toFixed(2);
   const description = lines.map(l => l.desc || 'Riga').join(', ');
-  
+
   await dbPut('invoices', {
     id: Date.now(),
     number: document.getElementById('invNumber').value,
@@ -951,7 +1102,7 @@ async function saveInvoice() {
     status: document.getElementById('invStatus').value,
     createdAt: new Date().toISOString()
   });
-  
+
   closeModal('invoiceModal');
   renderInvoices();
   toast('Fattura creata!', 'success');
@@ -960,11 +1111,11 @@ async function saveInvoice() {
 async function viewInvoice(id) {
   const inv = await dbGet('invoices', id);
   if (!inv) return;
-  
+
   document.getElementById('invoiceModalTitle').textContent = 'Anteprima Fattura';
   document.getElementById('invoiceModalSave').style.display = 'none';
   document.getElementById('invoiceModalPrint').style.display = '';
-  
+
   const sc = inv.status === 'Pagata' ? 'green' : inv.status === 'Emessa' ? 'blue' : inv.status === 'In scadenza' ? 'orange' : 'red';
   document.getElementById('invoiceModalBody').innerHTML = `
     <div class="invoice-preview">
@@ -974,13 +1125,13 @@ async function viewInvoice(id) {
       </div>
       <div class="inv-meta">
         <div class="block"><h4>Destinatario</h4><p><strong>${inv.client}</strong></p></div>
-        <div class="block"><h4>Descrizione</h4><p>${inv.description || '—'}</p></div>
+        <div class="block"><h4>Descrizione</h4><p>${inv.description || '\u2014'}</p></div>
       </div>
-      ${inv.lines && inv.lines.length ? `<table style="width:100%;margin-bottom:16px"><thead><tr><th>Descrizione</th><th style="text-align:right">Q.tà</th><th style="text-align:right">Prezzo</th><th style="text-align:right">Totale</th></tr></thead><tbody>${inv.lines.map(l => `<tr><td>${l.desc||'—'}</td><td style="text-align:right">${l.qty}</td><td style="text-align:right">€ ${(l.price||0).toFixed(2)}</td><td style="text-align:right">€ ${(l.total||0).toFixed(2)}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${inv.lines && inv.lines.length ? `<table style="width:100%;margin-bottom:16px"><thead><tr><th>Descrizione</th><th style="text-align:right">Q.t\u00e0</th><th style="text-align:right">Prezzo</th><th style="text-align:right">Totale</th></tr></thead><tbody>${inv.lines.map(l => `<tr><td>${l.desc||'\u2014'}</td><td style="text-align:right">${l.qty}</td><td style="text-align:right">\u20ac ${(l.price||0).toFixed(2)}</td><td style="text-align:right">\u20ac ${(l.total||0).toFixed(2)}</td></tr>`).join('')}</tbody></table>` : ''}
       <div class="inv-totals">
-        <div class="total-line"><span>Imponibile:</span><span>€ ${inv.amount.toFixed(2)}</span></div>
-        <div class="total-line"><span>IVA 22%:</span><span>€ ${inv.vat.toFixed(2)}</span></div>
-        <div class="total-line grand"><span>Totale:</span><span>€ ${inv.total.toFixed(2)}</span></div>
+        <div class="total-line"><span>Imponibile:</span><span>\u20ac ${inv.amount.toFixed(2)}</span></div>
+        <div class="total-line"><span>IVA 22%:</span><span>\u20ac ${inv.vat.toFixed(2)}</span></div>
+        <div class="total-line grand"><span>Totale:</span><span>\u20ac ${inv.total.toFixed(2)}</span></div>
       </div>
     </div>`;
   openModal('invoiceModal');
@@ -1008,16 +1159,16 @@ function saveSettings() {
   CONFIG.plateProvider = document.getElementById('settingsPlateProvider').value;
   CONFIG.partsProvider = document.getElementById('settingsPartsProvider').value;
   CONFIG.laborProvider = document.getElementById('settingsLaborProvider').value;
-  
+
   localStorage.setItem('autoparts_config', JSON.stringify({
     rapidApiKey: CONFIG.rapidApiKey,
     plateProvider: CONFIG.plateProvider,
     partsProvider: CONFIG.partsProvider,
     laborProvider: CONFIG.laborProvider
   }));
-  
+
   toast('Impostazioni salvate!', 'success');
-  loadMfrDropdown(); // refresh dropdown with new key
+  loadMfrDropdown();
 }
 
 async function testConnection() {
@@ -1026,16 +1177,15 @@ async function testConnection() {
     statusEl.innerHTML = '<span class="connection-dot red"></span> <strong>API Key mancante</strong> — inserisci la tua RapidAPI key';
     return;
   }
-  
+
   statusEl.innerHTML = '<div class="spinner" style="width:16px;height:16px;display:inline-block"></div> Test in corso...';
-  
+
   try {
-    // Test with the parts catalog languages endpoint (lightweight, no params needed)
     const prov = CONFIG.providers.autoPartsCatalog;
     const resp = await fetch(`${prov.baseUrl}/languages/list`, {
       headers: { 'X-RapidAPI-Key': CONFIG.rapidApiKey, 'X-RapidAPI-Host': prov.host }
     });
-    
+
     if (resp.ok) {
       statusEl.innerHTML = `<span class="connection-dot green"></span> <strong>Connessione riuscita!</strong> — API key valida (status: ${resp.status})`;
     } else if (resp.status === 403) {
@@ -1060,7 +1210,7 @@ async function showCacheStats() {
     const invCount = await dbCount('inventory');
     const invoiceCount = await dbCount('invoices');
     const movCount = await dbCount('movements');
-    
+
     el.innerHTML = `
       <table style="width:auto">
         <tr><td style="padding:4px 16px 4px 0">Cache API</td><td><strong>${cacheCount}</strong> voci</td></tr>
@@ -1092,16 +1242,189 @@ async function resetAllData() {
 }
 
 // ============================================================
-//  GLOBAL SEARCH
+//  ENHANCED GLOBAL SEARCH (Ricerca Unificata)
 // ============================================================
-function globalSearchHandler(e) {
-  // Autocomplete handles suggestions; Enter key does a stock search as fallback
-  if (e.key === 'Enter') {
-    const q = e.target.value.toLowerCase();
-    if (q.length < 2) return;
-    showPage('magazzino');
-    document.getElementById('stockSearch').value = q;
-    renderStock();
+class GlobalSearch {
+  constructor(inputId, dropdownId) {
+    this.input = document.getElementById(inputId);
+    this.dropdown = document.getElementById(dropdownId);
+    this.activeIdx = -1;
+    this.flatItems = [];
+    this._debounce = null;
+
+    this.input.addEventListener('input', () => {
+      clearTimeout(this._debounce);
+      this._debounce = setTimeout(() => this._onInput(), 150);
+    });
+    this.input.addEventListener('keydown', e => this._onKey(e));
+    this.input.addEventListener('focus', () => { if (this.input.value.length >= 2) this._onInput(); });
+    document.addEventListener('click', e => {
+      if (!this.input.contains(e.target) && !this.dropdown.contains(e.target)) this._close();
+    });
+  }
+
+  async _onInput() {
+    const q = this.input.value.trim();
+    if (q.length < 2) { this._close(); return; }
+    const ql = q.toLowerCase();
+    const groups = {};
+
+    // Vehicles
+    const vehicles = await dbGetAll('vehicles');
+    const matchV = vehicles.filter(v => v.plate.toLowerCase().includes(ql));
+    if (matchV.length) groups['\ud83d\ude97 Veicoli'] = matchV.slice(0, 5).map(v => ({
+      label: v.plate, sub: v.data?.compagniaAssicurativa || '', type: 'vehicle', data: v
+    }));
+
+    // Inventory
+    const inventory = await dbGetAll('inventory');
+    const matchI = inventory.filter(p => (p.name||'').toLowerCase().includes(ql) || (p.code||'').toLowerCase().includes(ql));
+    if (matchI.length) groups['\ud83d\udce6 Magazzino'] = matchI.slice(0, 5).map(p => ({
+      label: `${p.code} \u2014 ${p.name}`, sub: p.category || '', type: 'stock', data: p
+    }));
+
+    // Clients
+    const clients = await dbGetAll('clients');
+    const matchC = clients.filter(c => (c.company||'').toLowerCase().includes(ql) || (c.contact||'').toLowerCase().includes(ql));
+    if (matchC.length) groups['\ud83d\udc65 Clienti'] = matchC.slice(0, 5).map(c => ({
+      label: c.company, sub: c.city || '', type: 'client', data: c
+    }));
+
+    // Suppliers
+    const suppliers = await dbGetAll('suppliers');
+    const matchS = suppliers.filter(s => (s.name||'').toLowerCase().includes(ql));
+    if (matchS.length) groups['\ud83c\udfed Fornitori'] = matchS.slice(0, 5).map(s => ({
+      label: s.name, sub: s.spec || '', type: 'supplier', data: s
+    }));
+
+    // Invoices
+    const invoices = await dbGetAll('invoices');
+    const matchF = invoices.filter(i => (i.number||'').toLowerCase().includes(ql) || (i.client||'').toLowerCase().includes(ql));
+    if (matchF.length) groups['\ud83d\udcc4 Fatture'] = matchF.slice(0, 5).map(i => ({
+      label: i.number, sub: `${i.client} \u2014 \u20ac ${(i.total||0).toFixed(2)}`, type: 'invoice', data: i
+    }));
+
+    this._render(groups);
+  }
+
+  _render(groups) {
+    this.flatItems = [];
+    const keys = Object.keys(groups);
+    if (!keys.length) { this._close(); return; }
+
+    let html = '';
+    keys.forEach(groupLabel => {
+      html += `<div class="gs-group-header">${groupLabel}</div>`;
+      groups[groupLabel].forEach(item => {
+        const idx = this.flatItems.length;
+        this.flatItems.push(item);
+        html += `<div class="gs-item${idx === this.activeIdx ? ' gs-active' : ''}" data-idx="${idx}">
+          <span class="gs-item-label">${item.label}</span>
+          ${item.sub ? `<span class="gs-item-sub">${item.sub}</span>` : ''}
+        </div>`;
+      });
+    });
+
+    this.dropdown.innerHTML = html;
+    this.dropdown.style.display = 'block';
+    this.activeIdx = -1;
+
+    this.dropdown.querySelectorAll('.gs-item').forEach(el => {
+      el.addEventListener('mousedown', e => { e.preventDefault(); this._select(parseInt(el.dataset.idx)); });
+      el.addEventListener('mouseenter', () => { this.activeIdx = parseInt(el.dataset.idx); this._highlight(); });
+    });
+  }
+
+  _highlight() {
+    this.dropdown.querySelectorAll('.gs-item').forEach(el => {
+      el.classList.toggle('gs-active', parseInt(el.dataset.idx) === this.activeIdx);
+    });
+  }
+
+  _onKey(e) {
+    const open = this.dropdown.style.display === 'block';
+
+    if (e.key === 'Enter') {
+      if (open && this.activeIdx >= 0) {
+        e.preventDefault();
+        this._select(this.activeIdx);
+        return;
+      }
+      // Check if input looks like an Italian plate (2 letters + 3 digits + 2 letters)
+      const val = this.input.value.trim().toUpperCase().replace(/\s/g, '');
+      if (/^[A-Z]{2}\d{3}[A-Z]{2}$/.test(val)) {
+        e.preventDefault();
+        this._close();
+        this.input.value = '';
+        showPage('cerca');
+        switchCercaTab('targa');
+        document.getElementById('inputTarga').value = val;
+        searchByPlate();
+        return;
+      }
+      return;
+    }
+
+    if (!open) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      this.activeIdx = Math.min(this.activeIdx + 1, this.flatItems.length - 1);
+      this._highlight();
+      const active = this.dropdown.querySelector('.gs-active');
+      if (active) active.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      this.activeIdx = Math.max(this.activeIdx - 1, 0);
+      this._highlight();
+      const active = this.dropdown.querySelector('.gs-active');
+      if (active) active.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Escape') {
+      this._close();
+    }
+  }
+
+  _select(idx) {
+    const item = this.flatItems[idx];
+    if (!item) return;
+    this._close();
+    this.input.value = '';
+
+    switch (item.type) {
+      case 'vehicle':
+        showPage('cerca');
+        switchCercaTab('targa');
+        document.getElementById('inputTarga').value = item.data.plate;
+        searchByPlate();
+        break;
+      case 'stock':
+        showPage('magazzino');
+        document.getElementById('stockSearch').value = item.data.name || item.data.code || '';
+        renderStock();
+        break;
+      case 'client':
+        showPage('anagrafiche');
+        switchAnagTab('clienti');
+        document.getElementById('anagSearch').value = item.data.company;
+        renderAnagrafiche();
+        break;
+      case 'supplier':
+        showPage('anagrafiche');
+        switchAnagTab('fornitori');
+        document.getElementById('anagSearch').value = item.data.name;
+        renderAnagrafiche();
+        break;
+      case 'invoice':
+        showPage('fatture');
+        viewInvoice(item.data.id);
+        break;
+    }
+  }
+
+  _close() {
+    this.dropdown.style.display = 'none';
+    this.flatItems = [];
+    this.activeIdx = -1;
   }
 }
 
@@ -1119,7 +1442,6 @@ class Autocomplete {
     this.activeIdx = -1;
     this.items = [];
 
-    // Create dropdown
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'ac-dropdown';
     this.input.parentElement.style.position = 'relative';
@@ -1173,14 +1495,14 @@ class Autocomplete {
 }
 
 // ============================================================
-//  AUTOCOMPLETE INSTANCES (initialized after DOM ready)
+//  AUTOCOMPLETE INSTANCES
 // ============================================================
 function initAutocompletes() {
-  // Ricerca targa — suggerimenti da targhe già cercate
+  // Plate input — suggestions from searched plates
   new Autocomplete('inputTarga', {
     async getSuggestions(q) {
       const vehicles = await dbGetAll('vehicles');
-      return vehicles.map(v => v.plate).filter(p => p.toUpperCase().includes(q.toUpperCase())).map(p => ({ label: `🚗 ${p}`, value: p }));
+      return vehicles.map(v => v.plate).filter(p => p.toUpperCase().includes(q.toUpperCase())).map(p => ({ label: `\ud83d\ude97 ${p}`, value: p }));
     }
   });
 
@@ -1203,17 +1525,17 @@ function initAutocompletes() {
     }
   });
 
-  // Magazzino ricerca
+  // Stock search
   new Autocomplete('stockSearch', {
     async getSuggestions(q) {
       const items = await dbGetAll('inventory');
       return items.filter(p => (p.name || '').toLowerCase().includes(q.toLowerCase()) || (p.code || '').toLowerCase().includes(q.toLowerCase()))
-        .map(p => ({ label: `<strong>${p.code}</strong> — ${p.name}`, value: p.code + ' ' + p.name })).slice(0, 10);
+        .map(p => ({ label: `<strong>${p.code}</strong> \u2014 ${p.name}`, value: p.code + ' ' + p.name })).slice(0, 10);
     },
     onSelect() { renderStock(); }
   });
 
-  // Stock modal — codice autocomplete da cache catalogo
+  // Stock modal — code autocomplete from catalog cache
   new Autocomplete('stkCode', {
     async getSuggestions(q) {
       const d = await openDB();
@@ -1226,7 +1548,7 @@ function initAutocompletes() {
           const code = a.article_number || a.code || '';
           const name = a.name || a.title || '';
           if (code && (code.toUpperCase().includes(q.toUpperCase()) || name.toLowerCase().includes(q.toLowerCase()))) {
-            results.push({ label: `<strong>${code}</strong> — ${name}`, value: code, name });
+            results.push({ label: `<strong>${code}</strong> \u2014 ${name}`, value: code, name });
           }
         });
       });
@@ -1237,48 +1559,26 @@ function initAutocompletes() {
     }
   });
 
-  // Clienti ricerca
-  new Autocomplete('clientSearch', {
-    async getSuggestions(q) {
-      const clients = await dbGetAll('clients');
-      return clients.filter(c => (c.company||'').toLowerCase().includes(q.toLowerCase()) || (c.contact||'').toLowerCase().includes(q.toLowerCase()) || (c.city||'').toLowerCase().includes(q.toLowerCase()))
-        .map(c => ({ label: `<strong>${c.company}</strong> — ${c.city || ''} (${c.contact || ''})`, value: c.company }));
-    },
-    onSelect() { renderClients(); }
-  });
-
-  // Global search
-  new Autocomplete('globalSearch', {
-    minChars: 2,
+  // Anagrafiche search
+  new Autocomplete('anagSearch', {
     async getSuggestions(q) {
       const ql = q.toLowerCase();
       const results = [];
-      const clients = await dbGetAll('clients');
-      clients.filter(c => (c.company||'').toLowerCase().includes(ql)).forEach(c => results.push({ label: `👥 ${c.company}`, value: c.company, type: 'client' }));
-      const inv = await dbGetAll('inventory');
-      inv.filter(p => (p.name||'').toLowerCase().includes(ql) || (p.code||'').toLowerCase().includes(ql)).forEach(p => results.push({ label: `📦 ${p.code} — ${p.name}`, value: p.name, type: 'stock' }));
-      const suppliers = await dbGetAll('suppliers');
-      suppliers.filter(s => (s.name||'').toLowerCase().includes(ql)).forEach(s => results.push({ label: `🏭 ${s.name}`, value: s.name, type: 'supplier' }));
-      return results.slice(0, 12);
+      if (_activeAnagTab === 'clienti') {
+        const clients = await dbGetAll('clients');
+        clients.filter(c => (c.company||'').toLowerCase().includes(ql) || (c.contact||'').toLowerCase().includes(ql))
+          .forEach(c => results.push({ label: `<strong>${c.company}</strong> \u2014 ${c.city || ''} (${c.contact || ''})`, value: c.company }));
+      } else {
+        const suppliers = await dbGetAll('suppliers');
+        suppliers.filter(s => (s.name||'').toLowerCase().includes(ql))
+          .forEach(s => results.push({ label: `<strong>${s.name}</strong> \u2014 ${s.spec || ''}`, value: s.name }));
+      }
+      return results;
     },
-    onSelect(item) {
-      if (item.type === 'client') { showPage('clienti'); document.getElementById('clientSearch').value = item.value; renderClients(); }
-      else if (item.type === 'stock') { showPage('magazzino'); document.getElementById('stockSearch').value = item.value; renderStock(); }
-      else if (item.type === 'supplier') { showPage('fornitori'); }
-    }
+    onSelect() { renderAnagrafiche(); }
   });
 
-  // Fornitori ricerca
-  new Autocomplete('supplierSearch', {
-    async getSuggestions(q) {
-      const suppliers = await dbGetAll('suppliers');
-      return suppliers.filter(s => (s.name||'').toLowerCase().includes(q.toLowerCase()))
-        .map(s => ({ label: `🏭 <strong>${s.name}</strong> — ${s.spec || ''}`, value: s.name }));
-    },
-    onSelect() { renderSuppliers(); }
-  });
-
-  // Labor search autocomplete
+  // Labor search
   new Autocomplete('laborSearch', {
     getSuggestions(q) {
       return LABOR_TIMES.filter(l => l.descrizione.toLowerCase().includes(q.toLowerCase()))
@@ -1288,6 +1588,9 @@ function initAutocompletes() {
       renderLaborPage(document.getElementById('laborCatFilter').value, item.value);
     }
   });
+
+  // Global search (enhanced)
+  new GlobalSearch('globalSearch', 'gsDropdown');
 }
 
 // ============================================================
@@ -1344,7 +1647,7 @@ function initComboboxes() {
 async function init() {
   loadConfig();
   await openDB();
-  showPage('ricerca');
+  showPage('cerca');
   await loadMfrDropdown();
   initAutocompletes();
   initComboboxes();

@@ -141,6 +141,29 @@ const LABOR_TIMES = [
 
 const LABOR_CATEGORIES = [...new Set(LABOR_TIMES.map(l => l.categoria))];
 
+// Helpers
+const _laborDiffStars = d => '\u2605'.repeat(d) + '\u2606'.repeat(5 - d);
+const _laborDiffColor = d => d <= 2 ? 'var(--green)' : d <= 3 ? 'var(--orange)' : 'var(--red)';
+
+function laborRowHtml(l) {
+  return `<div class="labor-time-row">
+    <div style="flex:1">
+      <span>${l.descrizione}</span>
+      ${l.note ? `<div style="font-size:11px;color:var(--text-light);margin-top:2px">\u{1F4A1} ${l.note}</div>` : ''}
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+      <span style="font-size:11px;color:${_laborDiffColor(l.difficolta)}" title="Difficolt\u00e0 ${l.difficolta}/5">${_laborDiffStars(l.difficolta)}</span>
+      <span class="time">${l.tempo} h</span>
+    </div>
+  </div>`;
+}
+
+function laborCardHtml(cat, entries) {
+  return `<div class="labor-card"><div class="lc-header"><h4>${cat} <small style="opacity:.6;font-weight:400">(${entries.length})</small></h4></div><div class="lc-body">${entries.map(l => laborRowHtml(l)).join('')}</div></div>`;
+}
+
+let _laborScroller = null;
+
 function renderLaborPage(filter, search) {
   filter = filter || 'Tutte';
   search = (search || '').toLowerCase();
@@ -148,40 +171,33 @@ function renderLaborPage(filter, search) {
   if (filter !== 'Tutte') items = items.filter(l => l.categoria === filter);
   if (search) items = items.filter(l => l.descrizione.toLowerCase().includes(search) || l.categoria.toLowerCase().includes(search) || (l.note || '').toLowerCase().includes(search));
 
-  const diffStars = d => '★'.repeat(d) + '☆'.repeat(5 - d);
-  const diffColor = d => d <= 2 ? 'var(--green)' : d <= 3 ? 'var(--orange)' : 'var(--red)';
-
   const container = document.getElementById('laborContent');
   if (!items.length) {
+    if (_laborScroller) { _laborScroller.destroy(); _laborScroller = null; }
     container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-light)"><i class="fas fa-search" style="font-size:48px;margin-bottom:16px;opacity:.3"></i><h3>Nessun intervento trovato</h3></div>';
+    document.getElementById('laborCount').textContent = '0';
     return;
   }
 
   // Group by category
   const grouped = {};
-  items.forEach(l => {
-    if (!grouped[l.categoria]) grouped[l.categoria] = [];
-    grouped[l.categoria].push(l);
+  items.forEach(l => { if (!grouped[l.categoria]) grouped[l.categoria] = []; grouped[l.categoria].push(l); });
+  const groups = Object.entries(grouped);
+
+  container.innerHTML = '';
+  if (_laborScroller) { _laborScroller.destroy(); _laborScroller = null; }
+
+  _laborScroller = new InfiniteScroll(container, (offset, limit) => {
+    return groups.slice(offset, offset + limit);
+  }, {
+    pageSize: 2,
+    renderItem: ([cat, entries]) => laborCardHtml(cat, entries),
+    onEmpty: () => {
+      container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-light)"><h3>Nessun intervento trovato</h3></div>';
+    }
   });
 
-  let html = '';
-  for (const [cat, entries] of Object.entries(grouped)) {
-    html += `<div class="labor-card"><div class="lc-header"><h4>${cat} <small style="opacity:.6;font-weight:400">(${entries.length})</small></h4></div><div class="lc-body">`;
-    entries.forEach(l => {
-      html += `<div class="labor-time-row">
-        <div style="flex:1">
-          <span>${l.descrizione}</span>
-          ${l.note ? `<div style="font-size:11px;color:var(--text-light);margin-top:2px">💡 ${l.note}</div>` : ''}
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
-          <span style="font-size:11px;color:${diffColor(l.difficolta)}" title="Difficoltà ${l.difficolta}/5">${diffStars(l.difficolta)}</span>
-          <span class="time">${l.tempo} h</span>
-        </div>
-      </div>`;
-    });
-    html += '</div></div>';
-  }
-  container.innerHTML = html;
+  document.getElementById('laborCount').textContent = items.length;
 }
 
 function initLaborPage() {
