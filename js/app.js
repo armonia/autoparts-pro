@@ -305,19 +305,30 @@ function renderPlateResult(plate, data) {
       <div class="card-body">
         <p style="color:var(--text-light);font-size:13px;margin-bottom:16px">Il provider Informazioni Targhe non restituisce marca/modello. Seleziona il veicolo manualmente:</p>
         <div class="form-group"><label>Marca</label>
-          <select id="plateResultMarca" onchange="plateResultLoadModels()" style="width:100%"><option value="">— Caricamento... —</option></select>
+          <div class="combobox-wrap">
+            <input type="text" class="combobox-input" id="plateResultMarcaInput" placeholder="Caricamento marche..." autocomplete="off">
+            <select id="plateResultMarca" onchange="plateResultLoadModels()"><option value="">— Caricamento... —</option></select>
+          </div>
         </div>
         <div class="form-group"><label>Modello</label>
-          <select id="plateResultModello" onchange="plateResultLoadTypes()" style="width:100%"><option value="">— Seleziona marca —</option></select>
+          <div class="combobox-wrap">
+            <input type="text" class="combobox-input" id="plateResultModelloInput" placeholder="Seleziona marca prima" autocomplete="off">
+            <select id="plateResultModello" onchange="plateResultLoadTypes()"><option value="">— Seleziona marca —</option></select>
+          </div>
         </div>
         <div class="form-group"><label>Versione</label>
-          <select id="plateResultType" style="width:100%"><option value="">— Seleziona modello —</option></select>
+          <div class="combobox-wrap">
+            <input type="text" class="combobox-input" id="plateResultTypeInput" placeholder="Seleziona modello prima" autocomplete="off">
+            <select id="plateResultType" onchange="_updatePlateResultSearchBtn()"><option value="">— Seleziona modello —</option></select>
+          </div>
         </div>
-        <button class="btn btn-orange" onclick="plateResultSearchParts()" style="width:100%"><i class="fas fa-search"></i> Cerca Ricambi</button>
+        <button class="btn btn-orange" onclick="plateResultSearchParts()" id="btnPlateResultSearch" disabled style="width:100%"><i class="fas fa-search"></i> Cerca Ricambi</button>
       </div>
     </div>`;
 
-  // Load manufacturers into the inline dropdown
+  // Initialize comboboxes on the newly created elements
+  initComboboxes();
+  // Load manufacturers into the inline dropdown (async)
   _loadPlateResultMfrDropdown();
 }
 
@@ -419,43 +430,67 @@ async function autoNavigateCatalogByMake(makeName, modelName) {
 // Inline dropdowns for insurance-only plate results (manual catalog selection)
 async function _loadPlateResultMfrDropdown() {
   const sel = document.getElementById('plateResultMarca');
+  const inp = document.getElementById('plateResultMarcaInput');
   if (!sel) return;
+  if (inp) inp.placeholder = 'Caricamento marche...';
   try {
     const data = await cachedApiCall('catalog_manufacturers', () => getPartsProvider().getManufacturers());
     const items = Array.isArray(data) ? data : (data.data || data.manufacturers || []);
     sel.innerHTML = '<option value="">— Marca —</option>' + items.map(m => `<option value="${m.id}">${m.name || m.title}</option>`).join('');
+    if (inp) inp.placeholder = 'Cerca marca...';
   } catch(e) {
     sel.innerHTML = '<option value="">— Configura API Key —</option>';
+    if (inp) inp.placeholder = 'Configura API Key';
   }
 }
 
 async function plateResultLoadModels() {
   const mfrId = document.getElementById('plateResultMarca').value;
   const sel = document.getElementById('plateResultModello');
+  const inp = document.getElementById('plateResultModelloInput');
+  const typeInp = document.getElementById('plateResultTypeInput');
   sel.innerHTML = '<option value="">— Caricamento... —</option>';
   document.getElementById('plateResultType').innerHTML = '<option value="">— Versione —</option>';
-  if (!mfrId) { sel.innerHTML = '<option value="">— Modello —</option>'; return; }
+  if (inp) { inp.value = ''; inp.placeholder = mfrId ? 'Caricamento modelli...' : 'Cerca modello...'; }
+  if (typeInp) { typeInp.value = ''; typeInp.placeholder = 'Seleziona modello prima'; }
+  _updatePlateResultSearchBtn();
+  if (!mfrId) { sel.innerHTML = '<option value="">— Modello —</option>'; if (inp) inp.placeholder = 'Cerca modello...'; return; }
   try {
     const data = await cachedApiCall(`catalog_models_${mfrId}`, () => getPartsProvider().getModels(mfrId));
     const items = Array.isArray(data) ? data : (data.data || data.models || []);
     sel.innerHTML = '<option value="">— Modello —</option>' + items.map(m => `<option value="${m.id}">${m.name || m.title} ${m.year_from ? '(' + m.year_from + ')' : ''}</option>`).join('');
+    if (inp) inp.placeholder = 'Cerca modello...';
   } catch(e) {
     sel.innerHTML = '<option value="">— Errore —</option>';
+    if (inp) inp.placeholder = 'Errore caricamento';
   }
 }
 
 async function plateResultLoadTypes() {
   const modelId = document.getElementById('plateResultModello').value;
   const sel = document.getElementById('plateResultType');
+  const inp = document.getElementById('plateResultTypeInput');
   sel.innerHTML = '<option value="">— Caricamento... —</option>';
-  if (!modelId) { sel.innerHTML = '<option value="">— Versione —</option>'; return; }
+  if (inp) { inp.value = ''; inp.placeholder = modelId ? 'Caricamento versioni...' : 'Cerca versione...'; }
+  _updatePlateResultSearchBtn();
+  if (!modelId) { sel.innerHTML = '<option value="">— Versione —</option>'; if (inp) inp.placeholder = 'Cerca versione...'; return; }
   try {
     const data = await cachedApiCall(`catalog_types_${modelId}`, () => getPartsProvider().getTypes(modelId));
     const items = Array.isArray(data) ? data : (data.data || data.modelTypes || []);
     sel.innerHTML = '<option value="">— Versione —</option>' + items.map(t => `<option value="${t.id}">${t.name || t.title || 'N/D'} ${t.engine || ''}</option>`).join('');
+    if (inp) inp.placeholder = 'Cerca versione...';
   } catch(e) {
     sel.innerHTML = '<option value="">— Errore —</option>';
+    if (inp) inp.placeholder = 'Errore caricamento';
   }
+}
+
+function _updatePlateResultSearchBtn() {
+  const btn = document.getElementById('btnPlateResultSearch');
+  if (!btn) return;
+  const marca = document.getElementById('plateResultMarca')?.value;
+  const modello = document.getElementById('plateResultModello')?.value;
+  btn.disabled = !(marca && modello);
 }
 
 function plateResultSearchParts() {
@@ -582,7 +617,7 @@ async function loadCatalogModels(mfrId, mfrName) {
     });
   } catch(err) {
     handleApiError(err);
-    container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Errore nel caricamento dei modelli.</p>';
+    container.innerHTML = `<div class="error-state"><i class="fas fa-exclamation-circle"></i><h3>Errore nel caricamento dei modelli</h3><p>${err.message}</p><button class="btn btn-primary" onclick="loadCatalogModels(${mfrId},'${(mfrName||'').replace(/'/g,"\\'")}')"><i class="fas fa-redo"></i> Riprova</button></div>`;
   }
 }
 
@@ -608,7 +643,7 @@ async function loadCatalogTypes(modelId, modelName) {
     });
   } catch(err) {
     handleApiError(err);
-    container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Errore nel caricamento delle versioni.</p>';
+    container.innerHTML = `<div class="error-state"><i class="fas fa-exclamation-circle"></i><h3>Errore nel caricamento delle versioni</h3><p>${err.message}</p><button class="btn btn-primary" onclick="loadCatalogTypes(${modelId},'${(modelName||'').replace(/'/g,"\\'")}')"><i class="fas fa-redo"></i> Riprova</button></div>`;
   }
 }
 
@@ -641,7 +676,7 @@ async function loadCatalogCategories(vehicleId, typeName) {
     });
   } catch(err) {
     handleApiError(err);
-    container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Errore nel caricamento delle categorie.</p>';
+    container.innerHTML = `<div class="error-state"><i class="fas fa-exclamation-circle"></i><h3>Errore nel caricamento delle categorie</h3><p>${err.message}</p><button class="btn btn-primary" onclick="loadCatalogCategories(${vehicleId},'${(typeName||'').replace(/'/g,"\\'")}')"><i class="fas fa-redo"></i> Riprova</button></div>`;
   }
 }
 
@@ -686,7 +721,7 @@ async function loadCatalogArticles(catId, catName) {
     });
   } catch(err) {
     handleApiError(err);
-    container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Errore nel caricamento dei ricambi.</p>';
+    container.innerHTML = `<div class="error-state"><i class="fas fa-exclamation-circle"></i><h3>Errore nel caricamento dei ricambi</h3><p>${err.message}</p><button class="btn btn-primary" onclick="loadCatalogArticles(${catId},'${(catName||'').replace(/'/g,"\\'")}')"><i class="fas fa-redo"></i> Riprova</button></div>`;
   }
 }
 
@@ -720,16 +755,23 @@ function updateBreadcrumb() {
 async function loadModelsForMfr() {
   const mfrId = document.getElementById('selMarca').value;
   const selModello = document.getElementById('selModello');
+  const inputModello = document.getElementById('inputModello');
+  const inputType = document.getElementById('inputType');
   selModello.innerHTML = '<option value="">— Caricamento... —</option>';
   document.getElementById('selType').innerHTML = '<option value="">— Versione —</option>';
-  if (!mfrId) { selModello.innerHTML = '<option value="">— Modello —</option>'; return; }
+  if (inputModello) { inputModello.value = ''; inputModello.placeholder = mfrId ? 'Caricamento modelli...' : 'Cerca modello...'; }
+  if (inputType) inputType.value = '';
+  updateModelSearchBtn();
+  if (!mfrId) { selModello.innerHTML = '<option value="">— Modello —</option>'; if (inputModello) inputModello.placeholder = 'Cerca modello...'; return; }
 
   try {
     const data = await cachedApiCall(`catalog_models_${mfrId}`, () => getPartsProvider().getModels(mfrId));
     const items = Array.isArray(data) ? data : (data.data || data.models || []);
     selModello.innerHTML = '<option value="">— Modello —</option>' + items.map(m => `<option value="${m.id}">${m.name || m.title} ${m.year_from ? '(' + m.year_from + ')' : ''}</option>`).join('');
+    if (inputModello) inputModello.placeholder = 'Cerca modello...';
   } catch(e) {
     selModello.innerHTML = '<option value="">— Errore —</option>';
+    if (inputModello) inputModello.placeholder = 'Errore caricamento';
   }
 }
 
@@ -738,8 +780,9 @@ async function loadTypesForModel() {
   const selType = document.getElementById('selType');
   const inputType = document.getElementById('inputType');
   selType.innerHTML = '<option value="">— Caricamento... —</option>';
-  if (inputType) inputType.value = '';
-  if (!modelId) { selType.innerHTML = '<option value="">— Versione —</option>'; return; }
+  if (inputType) { inputType.value = ''; inputType.placeholder = modelId ? 'Caricamento versioni...' : 'Cerca versione...'; }
+  updateModelSearchBtn();
+  if (!modelId) { selType.innerHTML = '<option value="">— Versione —</option>'; if (inputType) inputType.placeholder = 'Cerca versione...'; return; }
   try {
     const data = await cachedApiCall(`catalog_types_${modelId}`, () => getPartsProvider().getTypes(modelId));
     const items = Array.isArray(data) ? data : (data.data || data.modelTypes || []);
@@ -747,8 +790,10 @@ async function loadTypesForModel() {
       const label = `${t.name || t.title || 'N/D'} ${t.engine || ''}`.trim();
       return `<option value="${t.id}">${label}</option>`;
     }).join('');
+    if (inputType) inputType.placeholder = 'Cerca versione...';
   } catch(e) {
     selType.innerHTML = '<option value="">— Errore —</option>';
+    if (inputType) inputType.placeholder = 'Errore caricamento';
   }
 }
 
@@ -756,13 +801,22 @@ function syncComboLabel(selId, inputId) {
   const sel = document.getElementById(selId);
   const inp = document.getElementById(inputId);
   if (sel && inp) inp.value = sel.selectedOptions[0]?.text?.startsWith('\u2014') ? '' : (sel.selectedOptions[0]?.text || '');
+  updateModelSearchBtn();
+}
+
+function updateModelSearchBtn() {
+  const btn = document.getElementById('btnSearchModel');
+  if (!btn) return;
+  const marca = document.getElementById('selMarca')?.value;
+  const modello = document.getElementById('selModello')?.value;
+  btn.disabled = !(marca && modello);
 }
 
 async function searchByModel() {
   const mfrId = document.getElementById('selMarca').value;
   const modelId = document.getElementById('selModello').value;
   const typeId = document.getElementById('selType').value;
-  if (!mfrId) { toast('Seleziona una marca'); return; }
+  if (!mfrId || !modelId) { toast('Seleziona marca e modello'); return; }
 
   showCatalogArea();
   const mfrName = document.getElementById('selMarca').selectedOptions[0]?.text || '';
@@ -789,14 +843,20 @@ async function searchByModel() {
 
 async function loadMfrDropdown() {
   const sel = document.getElementById('selMarca');
+  const inp = document.getElementById('inputMarca');
+  sel.innerHTML = '<option value="">— Caricamento... —</option>';
+  if (inp) inp.placeholder = 'Caricamento marche...';
   try {
     const data = await cachedApiCall('catalog_manufacturers', () => getPartsProvider().getManufacturers());
     const items = Array.isArray(data) ? data : (data.data || data.manufacturers || []);
     sel.innerHTML = '<option value="">— Marca —</option>' + items.map(m => `<option value="${m.id}">${m.name || m.title}</option>`).join('');
+    if (inp) inp.placeholder = 'Cerca marca...';
   } catch(e) {
     sel.innerHTML = '<option value="">— Configura API Key —</option>';
+    if (inp) inp.placeholder = 'Configura API Key';
   }
   if (typeof initComboboxes === 'function') initComboboxes();
+  updateModelSearchBtn();
 }
 
 // ============================================================
@@ -841,15 +901,15 @@ async function searchCrossRef() {
           ${a.price ? `<div style="font-weight:700;color:var(--accent)">\u20ac ${parseFloat(a.price).toFixed(2)}</div>` : ''}
         </div>`).join('');
     } else {
-      container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-light)">
-        <i class="fas fa-search" style="font-size:48px;margin-bottom:16px;opacity:.3"></i>
+      container.innerHTML = `<div class="empty-state">
+        <i class="fas fa-search"></i>
         <h3>Nessun risultato nella cache locale</h3>
-        <p>Naviga il Catalogo Ricambi per popolare la cache, poi riprova la cross-reference.</p>
-        <button class="btn btn-primary" style="margin-top:16px" onclick="showCatalogArea();loadCatalogManufacturers()"><i class="fas fa-cogs"></i> Vai al Catalogo</button>
+        <p>Naviga il Catalogo Ricambi per popolare la cache con articoli, poi riprova la ricerca cross-reference.</p>
+        <button class="btn btn-primary" onclick="showCatalogArea();loadCatalogManufacturers()"><i class="fas fa-cogs"></i> Vai al Catalogo</button>
       </div>`;
     }
   } catch(e) {
-    container.innerHTML = '<p style="color:var(--text-light);text-align:center;padding:40px">Errore nella ricerca.</p>';
+    container.innerHTML = '<div class="error-state"><i class="fas fa-exclamation-circle"></i><h3>Errore nella ricerca</h3><p>Si è verificato un errore durante la ricerca cross-reference.</p><button class="btn btn-primary" onclick="searchCrossRef()"><i class="fas fa-redo"></i> Riprova</button></div>';
   }
 }
 
@@ -1392,6 +1452,16 @@ function onPlateProviderChange() {
   const prov = document.getElementById('settingsPlateProvider').value;
   document.getElementById('zylaKeyGroup').style.display = prov === 'zyla' ? '' : 'none';
   document.getElementById('carRegGroup').style.display = prov === 'carRegistrationApi' ? '' : 'none';
+
+  const descEl = document.getElementById('plateProviderDesc');
+  if (descEl) {
+    const descs = {
+      informazioniTarghe: '<i class="fas fa-info-circle" style="margin-right:6px"></i>Solo dati assicurativi (no marca/modello). Richiede selezione manuale del veicolo per cercare ricambi.',
+      zyla: '<i class="fas fa-info-circle" style="margin-right:6px"></i>Dati completi veicolo (marca, modello, versione, cilindrata, carburante). Collegamento automatico al catalogo ricambi.',
+      carRegistrationApi: '<i class="fas fa-info-circle" style="margin-right:6px"></i>Dati completi veicolo (marca, modello, versione). Collegamento automatico al catalogo ricambi.'
+    };
+    descEl.innerHTML = descs[prov] || '';
+  }
 }
 
 function saveSettings() {
@@ -1841,7 +1911,8 @@ function initAutocompletes() {
 //  COMBOBOX — searchable select wrappers
 // ============================================================
 function initComboboxes() {
-  document.querySelectorAll('.combobox-wrap').forEach(wrap => {
+  document.querySelectorAll('.combobox-wrap:not([data-cb-init])').forEach(wrap => {
+    wrap.setAttribute('data-cb-init', '1');
     const input = wrap.querySelector('.combobox-input');
     const select = wrap.querySelector('select');
     if (!input || !select) return;
