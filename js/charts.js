@@ -9,6 +9,16 @@ async function initAnalytics() {
   const inventory = await dbGetAll('inventory');
   const clients = await dbGetAll('clients');
 
+  // Show empty state if no data
+  const hasData = invoices.length || orders.length || inventory.length || clients.length;
+  const emptyEl = document.getElementById('analyticsEmptyState');
+  const contentEl = document.getElementById('analyticsContent');
+  if (emptyEl && contentEl) {
+    emptyEl.style.display = hasData ? 'none' : '';
+    contentEl.style.display = hasData ? '' : 'none';
+    if (!hasData) return;
+  }
+
   // ---- Stat cards ----
   const thisMonth = new Date().toISOString().slice(0, 7);
   const monthInvoices = invoices.filter(i => (i.date || '').startsWith(thisMonth));
@@ -35,12 +45,12 @@ async function initAnalytics() {
   const monthlyRev = months.map((_, i) => {
     return invoices.filter(inv => new Date(inv.date).getMonth() === (8 + i) % 12).reduce((s, inv) => s + (inv.total || 0), 0);
   });
-  const hasData = monthlyRev.some(v => v > 0);
+  const hasRevData = monthlyRev.some(v => v > 0);
 
   // Revenue line chart
   new Chart(document.getElementById('chartRevenue'), {
     type: 'line',
-    data: { labels: months, datasets: [{ label: 'Fatturato €', data: hasData ? monthlyRev : [0,0,0,0,0,0], borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.1)', fill: true, tension: .4, pointBackgroundColor: '#3b82f6', pointRadius: 5 }] },
+    data: { labels: months, datasets: [{ label: 'Fatturato €', data: hasRevData ? monthlyRev : [0,0,0,0,0,0], borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.1)', fill: true, tension: .4, pointBackgroundColor: '#3b82f6', pointRadius: 5 }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '€ ' + v.toLocaleString('it-IT') } } } }
   });
 

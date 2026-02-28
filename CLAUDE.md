@@ -20,17 +20,23 @@ AutoParts Pro is a static single-page application for automotive parts catalog b
 
 **Load order**: `config.js` → `db.js` → `providers.js` → `pagination.js` → `charts.js` → `labor.js` → `app.js`
 
-## Pages (7 total)
+## Pages (8 total)
 
 | Sidebar Entry | Page ID | Description |
 |---|---|---|
-| Cerca | `page-cerca` | Unified search: plate lookup, marca/modello catalog browsing, cross-reference (merged from ricerca + catalogo + crossref) |
-| Manodopera | `page-manodopera` | Labor times reference with infinite scroll |
-| Analytics | `page-analytics` | Dashboard stats + charts + BI detailed analysis (merged from dashboard + BI) |
-| Magazzino | `page-magazzino` | Inventory management with infinite scroll on tables |
-| Anagrafiche | `page-anagrafiche` | Clients + Suppliers with tab switcher (merged from clienti + fornitori) |
+| Home | `page-home` | Landing with hero search, quick actions, recent searches, stats summary |
+| Cerca | `page-cerca` | Unified search: plate lookup, marca/modello catalog, cross-reference |
+| Magazzino | `page-magazzino` | Inventory management with infinite scroll |
 | Fatturazione | `page-fatture` | Invoicing with infinite scroll |
-| Impostazioni | `page-impostazioni` | API keys, provider selection, data management |
+| Anagrafiche | `page-anagrafiche` | Clients + Suppliers with tab switcher |
+| Manodopera | `page-manodopera` | Labor times reference with infinite scroll |
+| Analytics | `page-analytics` | Dashboard stats + charts + BI (empty state when no data) |
+| Impostazioni | `page-impostazioni` | API keys, provider selection, data management (sidebar footer) |
+
+### Sidebar Grouping
+- **Operativo**: Home, Cerca, Magazzino, Fatturazione
+- **Gestione**: Anagrafiche, Manodopera, Analytics
+- **Footer**: Impostazioni (separated at bottom)
 
 ## Infinite Scroll
 

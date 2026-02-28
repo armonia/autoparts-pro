@@ -69,16 +69,95 @@ function handleApiError(err) {
 // Track active anagrafiche tab
 let _activeAnagTab = 'clienti';
 
+// ============================================================
+//  SMART SEARCH — detects type and routes automatically
+// ============================================================
+function handleSmartSearch(val) {
+  val = (val || '').trim();
+  if (!val) return;
+
+  // 1. Italian plate pattern: 2 letters + 3 digits + 2 letters
+  const plateClean = val.toUpperCase().replace(/\s/g, '');
+  if (/^[A-Z]{2}\d{3}[A-Z]{2}$/.test(plateClean)) {
+    showPage('cerca');
+    switchCercaTab('targa');
+    document.getElementById('inputTarga').value = plateClean;
+    searchByPlate();
+    return;
+  }
+
+  // 2. Looks like an OEM code (mostly digits, possibly with letters)
+  if (/^\d{5,}$/.test(val.replace(/[\s\-]/g, '')) || /^[A-Z0-9]{6,}$/i.test(val.replace(/[\s\-]/g, ''))) {
+    showPage('cerca');
+    switchCercaTab('crossref');
+    document.getElementById('crossrefInput').value = val;
+    searchCrossRef();
+    return;
+  }
+
+  // 3. Default: treat as general search / brand name
+  showPage('cerca');
+  switchCercaTab('modello');
+  // Try to set it in the marca input
+  document.getElementById('inputMarca').value = val;
+  // Trigger combobox filter
+  document.getElementById('inputMarca').dispatchEvent(new Event('input'));
+}
+
+// ============================================================
+//  HOME PAGE
+// ============================================================
+async function initHomePage() {
+  // Load stats
+  const [inventory, clients, invoices] = await Promise.all([
+    dbGetAll('inventory'), dbGetAll('clients'), dbGetAll('invoices')
+  ]);
+  const lowStock = inventory.filter(p => p.stock > 0 && p.stock <= (p.minStock || 0)).length;
+
+  const hasData = inventory.length || clients.length || invoices.length;
+  const statsEl = document.getElementById('homeStats');
+  if (hasData) {
+    statsEl.style.display = '';
+    document.getElementById('homeSkus').textContent = inventory.length;
+    document.getElementById('homeClients').textContent = clients.length;
+    document.getElementById('homeInvoices').textContent = invoices.length;
+    document.getElementById('homeLowStock').textContent = lowStock;
+  } else {
+    statsEl.style.display = 'none';
+  }
+
+  // Recent searches
+  const vehicles = await dbGetAll('vehicles');
+  const recentCard = document.getElementById('homeRecentCard');
+  if (vehicles.length) {
+    recentCard.style.display = '';
+    const sorted = vehicles.sort((a, b) => (b.searchedAt || '').localeCompare(a.searchedAt || '')).slice(0, 5);
+    document.getElementById('homeRecentContent').innerHTML = `
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${sorted.map(v => {
+          const d = v.data || {};
+          const isRich = d.CarMake;
+          const label = isRich ? `${d.CarMake} ${d.CarModel}` : v.plate;
+          return `<div class="quick-action" style="flex:1;min-width:180px;margin:0" onclick="document.getElementById('inputTarga').value='${v.plate}';showPage('cerca');switchCercaTab('targa');searchByPlate()">
+            <div class="qa-icon orange"><i class="fas fa-car"></i></div>
+            <div><h4 style="font-family:monospace;letter-spacing:1px">${v.plate}</h4><p>${label !== v.plate ? label : (d.descrizioneTipoVeicolo || 'Veicolo')}</p></div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  } else {
+    recentCard.style.display = 'none';
+  }
+
+  // Cart count
+  document.getElementById('cartCount').textContent = inventory.reduce((s, p) => s + (p.stock || 0), 0);
+}
+
 function showPage(page) {
-  // Backward compatibility for old page names
+  // Backward compatibility
   const pageMap = {
-    'ricerca': 'cerca',
-    'catalogo': 'cerca',
-    'crossref': 'cerca',
-    'dashboard': 'analytics',
-    'bi': 'analytics',
-    'clienti': 'anagrafiche',
-    'fornitori': 'anagrafiche'
+    'ricerca': 'cerca', 'catalogo': 'cerca', 'crossref': 'cerca',
+    'dashboard': 'analytics', 'bi': 'analytics',
+    'clienti': 'anagrafiche', 'fornitori': 'anagrafiche'
   };
   const actualPage = pageMap[page] || page;
 
@@ -88,24 +167,18 @@ function showPage(page) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.querySelector(`.nav-item[data-page="${actualPage}"]`)?.classList.add('active');
 
-  // Handle sub-page contexts for backward compat
-  if (page === 'catalogo') {
-    showCatalogArea();
-    loadCatalogManufacturers();
-  } else if (page === 'crossref') {
-    switchCercaTab('crossref');
-  } else if (page === 'clienti') {
-    switchAnagTab('clienti');
-  } else if (page === 'fornitori') {
-    switchAnagTab('fornitori');
-  }
+  // Sub-page routing
+  if (page === 'catalogo') { showCatalogArea(); loadCatalogManufacturers(); }
+  else if (page === 'crossref') { switchCercaTab('crossref'); }
+  else if (page === 'clienti') { switchAnagTab('clienti'); }
+  else if (page === 'fornitori') { switchAnagTab('fornitori'); }
 
-  // Page init functions
+  // Close mobile sidebar
+  document.querySelector('.sidebar')?.classList.remove('open');
+
   const pageInits = {
-    cerca: () => {
-      apiKeyBanner('cercaBanner');
-      loadVehicleHistory();
-    },
+    home: initHomePage,
+    cerca: () => { apiKeyBanner('cercaBanner'); loadVehicleHistory(); },
     manodopera: () => {
       const sel = document.getElementById('laborCatFilter');
       if (sel && sel.options.length <= 1) {
@@ -1664,16 +1737,13 @@ class GlobalSearch {
         this._select(this.activeIdx);
         return;
       }
-      // Check if input looks like an Italian plate (2 letters + 3 digits + 2 letters)
-      const val = this.input.value.trim().toUpperCase().replace(/\s/g, '');
-      if (/^[A-Z]{2}\d{3}[A-Z]{2}$/.test(val)) {
+      // Use smart search for any Enter
+      const val = this.input.value.trim();
+      if (val) {
         e.preventDefault();
         this._close();
         this.input.value = '';
-        showPage('cerca');
-        switchCercaTab('targa');
-        document.getElementById('inputTarga').value = val;
-        searchByPlate();
+        handleSmartSearch(val);
         return;
       }
       return;
@@ -1959,10 +2029,20 @@ function initComboboxes() {
 // ============================================================
 //  INIT
 // ============================================================
+// ============================================================
+//  KEYBOARD SHORTCUT — ⌘K / Ctrl+K focuses search
+// ============================================================
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    document.getElementById('globalSearch').focus();
+  }
+});
+
 async function init() {
   loadConfig();
   await openDB();
-  showPage('cerca');
+  showPage('home');
   await loadMfrDropdown();
   initAutocompletes();
   initComboboxes();
