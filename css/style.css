@@ -222,6 +222,14 @@ tr:hover{background:#f8fafc}
 .gs-item:hover,.gs-item.gs-active{background:#f0f7ff;color:var(--accent)}
 .gs-item-label{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gs-item-sub{font-size:11px;color:var(--text-light);flex-shrink:0}
+/* Rich Vehicle Card */
+.rich-vehicle-card .v-header{padding:28px 24px}
+.vehicle-specs-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.spec-item{display:flex;flex-direction:column;padding:10px 14px;background:var(--bg);border-radius:8px}
+.spec-label{font-size:11px;color:var(--text-light);font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.spec-label i{font-size:12px;color:var(--accent);width:14px;text-align:center}
+.spec-value{font-size:14px;font-weight:700;color:var(--text)}
+@media(max-width:480px){.vehicle-specs-grid{grid-template-columns:1fr}}
 /* Infinite Scroll */
 .is-sentinel{min-height:1px}
 .is-spinner{display:flex;align-items:center;justify-content:center;padding:24px;gap:12px;color:var(--text-light);font-size:13px}

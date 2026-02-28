@@ -203,10 +203,14 @@
 <h2 style="margin-bottom:24px">⚙️ Impostazioni</h2>
 
 <div class="setting-card">
-<h3><i class="fas fa-key" style="color:var(--accent)"></i> API Key RapidAPI</h3>
-<p style="color:var(--text-light);font-size:13px;margin-bottom:16px">Un'unica chiave per Informazioni Targhe e Auto Parts Catalog. <a href="https://rapidapi.com" target="_blank">Ottieni la tua chiave gratuita →</a></p>
+<h3><i class="fas fa-key" style="color:var(--accent)"></i> Chiavi API</h3>
+<p style="color:var(--text-light);font-size:13px;margin-bottom:16px">Configura le credenziali per i servizi API.</p>
 <div class="form-row">
-<div class="form-group"><label>RapidAPI Key</label><input type="password" id="settingsApiKey" placeholder="Incolla qui la tua RapidAPI key..."></div>
+<div class="form-group"><label>RapidAPI Key</label><input type="password" id="settingsApiKey" placeholder="Per Informazioni Targhe + Auto Parts Catalog"></div>
+<div class="form-group" id="zylaKeyGroup" style="display:none"><label>Zyla API Key</label><input type="password" id="settingsZylaKey" placeholder="Bearer token da Zyla API Hub"></div>
+</div>
+<div class="form-row">
+<div class="form-group" id="carRegGroup" style="display:none"><label>CarRegistrationAPI Username</label><input type="text" id="settingsCarRegUser" placeholder="Username da carregistrationapi.com"></div>
 <div class="form-group"><label>&nbsp;</label>
 <div style="display:flex;gap:8px">
 <button class="btn btn-primary" onclick="saveSettings()" style="flex:1"><i class="fas fa-save"></i> Salva</button>
@@ -221,10 +225,11 @@
 <h3><i class="fas fa-plug" style="color:var(--accent)"></i> Provider Dati</h3>
 <p style="color:var(--text-light);font-size:13px;margin-bottom:16px">Seleziona quale servizio utilizzare per ogni tipo di dato.</p>
 <div class="form-row">
-<div class="form-group"><label>Ricerca Veicolo per Targa</label>
-<select id="settingsPlateProvider">
-<option value="informazioniTarghe">Informazioni Targhe (RapidAPI) — 10 ricerche/giorno</option>
-<option value="custom">Provider Personalizzato</option>
+<div class="form-group"><label>Provider Targhe</label>
+<select id="settingsPlateProvider" onchange="onPlateProviderChange()">
+<option value="informazioniTarghe">Informazioni Targhe (RapidAPI) — solo dati assicurativi</option>
+<option value="zyla">Zyla (Italy License Plate Lookup) — dati veicolo completi</option>
+<option value="carRegistrationApi">CarRegistrationAPI — dati veicolo completi</option>
 </select></div>
 <div class="form-group"><label>Catalogo Ricambi</label>
 <select id="settingsPartsProvider">

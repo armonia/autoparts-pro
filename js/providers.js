@@ -99,6 +99,110 @@ const PlateProviders = {
       // Flatten into a convenient shape
       return entry.data;
     }
+  },
+
+  zyla: {
+    /**
+     * Zyla API Hub — Italy License Plate Lookup
+     * Returns rich vehicle data: CarMake, CarModel, Version, EngineSize, FuelType, ABS, AirBag
+     */
+    async lookup(plate) {
+      if (!CONFIG.zylaApiKey) throw new Error('ZYLA_KEY_MISSING');
+      if (!RateLimiter.check('plate', CONFIG.rateLimits.plateLookupsPerDay, 'day'))
+        throw new Error('DAILY_LIMIT_REACHED');
+
+      const url = `${CONFIG.providers.zyla.baseUrl}?plate=${encodeURIComponent(plate)}`;
+      const resp = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${CONFIG.zylaApiKey}` }
+      });
+      if (resp.status === 429) throw new Error('QUOTA_EXCEEDED');
+      if (resp.status === 401 || resp.status === 403) throw new Error('ZYLA_KEY_INVALID');
+      if (!resp.ok) throw new Error(`API_ERROR_${resp.status}`);
+
+      const data = await resp.json();
+      if (!data || (!data.Description && !data.CarMake)) throw new Error('NO_DATA');
+
+      // Return normalized format with _providerType marker
+      return {
+        _providerType: 'zyla',
+        Description: data.Description || '',
+        RegistrationYear: data.RegistrationYear || '',
+        CarMake: data.CarMake?.CurrentTextValue || data.MakeDescription?.CurrentTextValue || '',
+        CarModel: data.CarModel?.CurrentTextValue || data.ModelDescription?.CurrentTextValue || '',
+        Version: data.Version || '',
+        EngineSize: data.EngineSize?.CurrentTextValue || '',
+        FuelType: data.FuelType?.CurrentTextValue || '',
+        ABS: data.ABS || '',
+        AirBag: data.AirBag || ''
+      };
+    }
+  },
+
+  carRegistrationApi: {
+    /**
+     * CarRegistrationAPI.com — CheckItaly endpoint
+     * Returns XML wrapping JSON with same structure as Zyla
+     */
+    async lookup(plate) {
+      if (!CONFIG.carRegUsername) throw new Error('CARREG_USERNAME_MISSING');
+      if (!RateLimiter.check('plate', CONFIG.rateLimits.plateLookupsPerDay, 'day'))
+        throw new Error('DAILY_LIMIT_REACHED');
+
+      const url = `${CONFIG.providers.carRegistrationApi.baseUrl}?RegistrationNumber=${encodeURIComponent(plate)}&username=${encodeURIComponent(CONFIG.carRegUsername)}`;
+      const resp = await fetch(url);
+      if (resp.status === 429) throw new Error('QUOTA_EXCEEDED');
+      if (resp.status === 401 || resp.status === 403) throw new Error('CARREG_AUTH_INVALID');
+      if (!resp.ok) throw new Error(`API_ERROR_${resp.status}`);
+
+      const xmlText = await resp.text();
+
+      // Parse XML to extract the JSON payload inside <vehicleJson> or <Description>
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+
+      // The API wraps vehicle data in a <vehicleJson> element containing JSON
+      let data = null;
+      const jsonEl = xmlDoc.querySelector('vehicleJson') || xmlDoc.querySelector('vehicleData');
+      if (jsonEl && jsonEl.textContent) {
+        try { data = JSON.parse(jsonEl.textContent); } catch(e) {}
+      }
+
+      // Fallback: try extracting Description directly from XML
+      if (!data) {
+        const descEl = xmlDoc.querySelector('Description');
+        if (descEl) {
+          // Build data from individual XML elements
+          const getText = tag => { const el = xmlDoc.querySelector(tag); return el ? el.textContent : ''; };
+          data = {
+            Description: getText('Description'),
+            RegistrationYear: getText('RegistrationYear'),
+            CarMake: { CurrentTextValue: getText('CarMake CurrentTextValue') || getText('MakeDescription CurrentTextValue') || '' },
+            CarModel: { CurrentTextValue: getText('CarModel CurrentTextValue') || getText('ModelDescription CurrentTextValue') || '' },
+            Version: getText('Version'),
+            EngineSize: { CurrentTextValue: getText('EngineSize CurrentTextValue') || '' },
+            FuelType: { CurrentTextValue: getText('FuelType CurrentTextValue') || '' },
+            ABS: getText('ABS'),
+            AirBag: getText('AirBag')
+          };
+        }
+      }
+
+      if (!data) throw new Error('NO_DATA');
+
+      // Normalize to same format as Zyla
+      return {
+        _providerType: 'carRegistrationApi',
+        Description: data.Description || '',
+        RegistrationYear: data.RegistrationYear || '',
+        CarMake: data.CarMake?.CurrentTextValue || data.MakeDescription?.CurrentTextValue || '',
+        CarModel: data.CarModel?.CurrentTextValue || data.ModelDescription?.CurrentTextValue || '',
+        Version: data.Version || '',
+        EngineSize: data.EngineSize?.CurrentTextValue || '',
+        FuelType: data.FuelType?.CurrentTextValue || '',
+        ABS: data.ABS || '',
+        AirBag: data.AirBag || ''
+      };
+    }
   }
 };
 

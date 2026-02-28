@@ -6,6 +6,8 @@ const CONFIG = {
   partsProvider: 'autoPartsCatalog',
   laborProvider: 'openLabor',
   rapidApiKey: '73513f5d7cmsh409c6b79390db57p163d16jsn6ef239e9de41',
+  zylaApiKey: '',
+  carRegUsername: '',
   // Rate limits (free tier) - hard stop to prevent charges
   rateLimits: {
     plateLookupsPerDay: 10,
@@ -20,6 +22,8 @@ const CONFIG = {
   },
   providers: {
     informazioniTarghe: { baseUrl: 'https://informazioni-targhe.p.rapidapi.com', host: 'informazioni-targhe.p.rapidapi.com' },
+    zyla: { baseUrl: 'https://zylalabs.com/api/352/italy+license+plate+lookup+api/458/license+plate+lookup' },
+    carRegistrationApi: { baseUrl: 'https://www.regcheck.org.uk/api/reg.asmx/CheckItaly' },
     autoPartsCatalog: { baseUrl: 'https://auto-parts-catalog.p.rapidapi.com', host: 'auto-parts-catalog.p.rapidapi.com' },
     openLabor: { baseUrl: 'https://openlaborproject.com' }
   }
@@ -31,6 +35,8 @@ function loadConfig() {
   if (saved) {
     const c = JSON.parse(saved);
     CONFIG.rapidApiKey = c.rapidApiKey || '';
+    CONFIG.zylaApiKey = c.zylaApiKey || '';
+    CONFIG.carRegUsername = c.carRegUsername || '';
     CONFIG.plateProvider = c.plateProvider || 'informazioniTarghe';
     CONFIG.partsProvider = c.partsProvider || 'autoPartsCatalog';
     CONFIG.laborProvider = c.laborProvider || 'openLabor';

@@ -13,13 +13,21 @@ function closeModal(id) { document.getElementById(id).classList.remove('show'); 
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 
 function apiKeyBanner(containerId) {
-  if (!CONFIG.rapidApiKey) {
+  const plateOk = CONFIG.plateProvider === 'zyla' ? !!CONFIG.zylaApiKey
+    : CONFIG.plateProvider === 'carRegistrationApi' ? !!CONFIG.carRegUsername
+    : !!CONFIG.rapidApiKey;
+  const catalogOk = !!CONFIG.rapidApiKey;
+
+  if (!plateOk || !catalogOk) {
+    const msgs = [];
+    if (!plateOk) msgs.push('credenziali provider targhe');
+    if (!catalogOk) msgs.push('RapidAPI key per il catalogo');
     document.getElementById(containerId).innerHTML = `
       <div class="api-banner">
         <i class="fas fa-exclamation-triangle"></i>
         <div>
-          <strong>API key non configurata.</strong> Per utilizzare le funzionalità di ricerca veicoli e catalogo ricambi,
-          <a onclick="showPage('impostazioni')">configura la tua RapidAPI key nelle Impostazioni</a>.
+          <strong>Configurazione incompleta.</strong> Mancano: ${msgs.join(', ')}.
+          <a onclick="showPage('impostazioni')">Vai alle Impostazioni</a>.
         </div>
       </div>`;
   } else {
@@ -30,6 +38,22 @@ function apiKeyBanner(containerId) {
 function handleApiError(err) {
   if (err.message === 'API_KEY_MISSING') {
     toast('\u26a0\ufe0f Configura la tua API key nelle Impostazioni', 'warning');
+    return;
+  }
+  if (err.message === 'ZYLA_KEY_MISSING') {
+    toast('\u26a0\ufe0f Configura la tua Zyla API key nelle Impostazioni', 'warning');
+    return;
+  }
+  if (err.message === 'ZYLA_KEY_INVALID') {
+    toast('\u274c Zyla API key non valida — verifica nelle Impostazioni', 'error');
+    return;
+  }
+  if (err.message === 'CARREG_USERNAME_MISSING') {
+    toast('\u26a0\ufe0f Configura il tuo username CarRegistrationAPI nelle Impostazioni', 'warning');
+    return;
+  }
+  if (err.message === 'CARREG_AUTH_INVALID') {
+    toast('\u274c Credenziali CarRegistrationAPI non valide', 'error');
     return;
   }
   if (err.message === 'QUOTA_EXCEEDED') {
@@ -228,6 +252,14 @@ async function searchByPlate() {
 
 function renderPlateResult(plate, data) {
   const v = data || {};
+
+  // Check if this is a rich vehicle data response (Zyla / CarRegistrationAPI)
+  if (v._providerType === 'zyla' || v._providerType === 'carRegistrationApi' || v.CarMake) {
+    renderRichVehicleResult(plate, v);
+    return;
+  }
+
+  // Original: insurance-only data from Informazioni Targhe
   const tipoVeicolo = v.descrizioneTipoVeicolo || v.tipoVeicolo || '\u2014';
   const assicurazione = v.compagniaAssicurativa || '\u2014';
   const polizza = v.numeroPolizza || '\u2014';
@@ -265,7 +297,197 @@ function renderPlateResult(plate, data) {
           <button class="btn btn-outline btn-sm" onclick="showPage('manodopera')"><i class="fas fa-clock"></i> Tempi Manodopera</button>
         </div>
       </div>
+    </div>
+
+    <!-- Manual catalog selection for insurance-only provider -->
+    <div class="card" style="margin-top:24px;max-width:600px">
+      <div class="card-header"><h3><i class="fas fa-search" style="color:var(--accent)"></i> Cerca Ricambi per questo Veicolo</h3></div>
+      <div class="card-body">
+        <p style="color:var(--text-light);font-size:13px;margin-bottom:16px">Il provider Informazioni Targhe non restituisce marca/modello. Seleziona il veicolo manualmente:</p>
+        <div class="form-group"><label>Marca</label>
+          <select id="plateResultMarca" onchange="plateResultLoadModels()" style="width:100%"><option value="">— Caricamento... —</option></select>
+        </div>
+        <div class="form-group"><label>Modello</label>
+          <select id="plateResultModello" onchange="plateResultLoadTypes()" style="width:100%"><option value="">— Seleziona marca —</option></select>
+        </div>
+        <div class="form-group"><label>Versione</label>
+          <select id="plateResultType" style="width:100%"><option value="">— Seleziona modello —</option></select>
+        </div>
+        <button class="btn btn-orange" onclick="plateResultSearchParts()" style="width:100%"><i class="fas fa-search"></i> Cerca Ricambi</button>
+      </div>
     </div>`;
+
+  // Load manufacturers into the inline dropdown
+  _loadPlateResultMfrDropdown();
+}
+
+// Rich vehicle card for Zyla / CarRegistrationAPI results
+function renderRichVehicleResult(plate, v) {
+  const make = v.CarMake || '\u2014';
+  const model = v.CarModel || '\u2014';
+  const version = v.Version || '\u2014';
+  const year = v.RegistrationYear || '\u2014';
+  const engine = v.EngineSize || '\u2014';
+  const fuel = v.FuelType || '\u2014';
+  const abs = v.ABS === 'S' ? '\u2705 S\u00ec' : v.ABS === 'N' ? '\u274c No' : (v.ABS || '\u2014');
+  const airbag = v.AirBag === 'S' ? '\u2705 S\u00ec' : v.AirBag === 'N' ? '\u274c No' : (v.AirBag || '\u2014');
+  const desc = v.Description || `${make} ${model}`;
+  const escapedMake = (make).replace(/'/g, "\\'");
+  const escapedModel = (model).replace(/'/g, "\\'");
+
+  document.getElementById('vehicleResults').innerHTML = `
+    <div class="vehicle-card rich-vehicle-card" style="border-color:var(--accent);max-width:640px">
+      <div class="v-header" style="position:relative;background:linear-gradient(135deg,#1e3a5f,#0f2340)">
+        <div style="position:absolute;top:12px;right:12px;background:rgba(255,255,255,.15);padding:4px 12px;border-radius:6px;font-size:11px;font-weight:600">\ud83c\uddee\ud83c\uddf9 ${plate}</div>
+        <i class="fas fa-car" style="font-size:48px;margin-bottom:12px;opacity:.8"></i>
+        <h4 style="font-size:20px">${make} ${model}</h4>
+        <small style="opacity:.7">${version}</small>
+      </div>
+      <div class="v-body" style="padding:20px 24px">
+        <div class="vehicle-specs-grid">
+          <div class="spec-item"><span class="spec-label"><i class="fas fa-industry"></i> Marca</span><span class="spec-value">${make}</span></div>
+          <div class="spec-item"><span class="spec-label"><i class="fas fa-car-side"></i> Modello</span><span class="spec-value">${model}</span></div>
+          <div class="spec-item"><span class="spec-label"><i class="fas fa-code-branch"></i> Versione</span><span class="spec-value" style="font-size:12px">${version}</span></div>
+          <div class="spec-item"><span class="spec-label"><i class="fas fa-calendar"></i> Anno</span><span class="spec-value">${year}</span></div>
+          <div class="spec-item"><span class="spec-label"><i class="fas fa-tachometer-alt"></i> Cilindrata</span><span class="spec-value">${engine}</span></div>
+          <div class="spec-item"><span class="spec-label"><i class="fas fa-gas-pump"></i> Carburante</span><span class="spec-value">${fuel}</span></div>
+          <div class="spec-item"><span class="spec-label"><i class="fas fa-shield-alt"></i> ABS</span><span class="spec-value">${abs}</span></div>
+          <div class="spec-item"><span class="spec-label"><i class="fas fa-life-ring"></i> Airbag</span><span class="spec-value">${airbag}</span></div>
+        </div>
+        ${make !== '\u2014' ? `
+        <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+          <button class="btn btn-orange" onclick="autoNavigateCatalogByMake('${escapedMake}','${escapedModel}')" style="font-size:14px;padding:12px 24px">
+            <i class="fas fa-search"></i> Cerca Ricambi per ${make} ${model}
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="showPage('manodopera')" style="color:var(--text)"><i class="fas fa-clock"></i> Tempi Manodopera</button>
+        </div>` : `
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:center">
+          <button class="btn btn-primary btn-sm" onclick="showCatalogArea();loadCatalogManufacturers()"><i class="fas fa-cogs"></i> Cerca Ricambi</button>
+          <button class="btn btn-outline btn-sm" onclick="showPage('manodopera')"><i class="fas fa-clock"></i> Tempi Manodopera</button>
+        </div>`}
+      </div>
+    </div>`;
+}
+
+// Auto-navigate catalog by make/model name from plate result
+async function autoNavigateCatalogByMake(makeName, modelName) {
+  showPage('cerca');
+  switchCercaTab('modello');
+  showCatalogArea();
+
+  const container = document.getElementById('catalogContent');
+  container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div><p>Ricerca ' + makeName + ' nel catalogo...</p></div>';
+
+  try {
+    const mfrs = await cachedApiCall('catalog_manufacturers', () => getPartsProvider().getManufacturers());
+    const items = Array.isArray(mfrs) ? mfrs : (mfrs.data || mfrs.manufacturers || []);
+
+    // Fuzzy match manufacturer name
+    const makeUpper = makeName.toUpperCase();
+    let match = items.find(m => (m.name || '').toUpperCase() === makeUpper);
+    if (!match) match = items.find(m => (m.name || '').toUpperCase().includes(makeUpper));
+    if (!match) match = items.find(m => makeUpper.includes((m.name || '').toUpperCase()));
+
+    if (match) {
+      toast(`Trovato: ${match.name} — caricamento modelli...`, 'success');
+      await loadCatalogModels(match.id, match.name || match.title);
+
+      // Try to find matching model
+      if (modelName && modelName !== '\u2014') {
+        const models = await cachedApiCall(`catalog_models_${match.id}`, () => getPartsProvider().getModels(match.id));
+        const modelItems = Array.isArray(models) ? models : (models.data || models.models || []);
+        const modelUpper = modelName.toUpperCase().replace(/\s+/g, ' ');
+        let modelMatch = modelItems.find(m => (m.name || '').toUpperCase() === modelUpper);
+        if (!modelMatch) modelMatch = modelItems.find(m => (m.name || '').toUpperCase().includes(modelUpper));
+        if (!modelMatch) modelMatch = modelItems.find(m => modelUpper.includes((m.name || '').toUpperCase()));
+
+        if (modelMatch) {
+          toast(`Modello trovato: ${modelMatch.name}`, 'success');
+          await loadCatalogTypes(modelMatch.id, modelMatch.name || modelMatch.title);
+        }
+      }
+    } else {
+      toast(`"${makeName}" non trovato nel catalogo — seleziona manualmente`, 'warning');
+      loadCatalogManufacturers();
+    }
+  } catch(err) {
+    handleApiError(err);
+    loadCatalogManufacturers();
+  }
+}
+
+// Inline dropdowns for insurance-only plate results (manual catalog selection)
+async function _loadPlateResultMfrDropdown() {
+  const sel = document.getElementById('plateResultMarca');
+  if (!sel) return;
+  try {
+    const data = await cachedApiCall('catalog_manufacturers', () => getPartsProvider().getManufacturers());
+    const items = Array.isArray(data) ? data : (data.data || data.manufacturers || []);
+    sel.innerHTML = '<option value="">— Marca —</option>' + items.map(m => `<option value="${m.id}">${m.name || m.title}</option>`).join('');
+  } catch(e) {
+    sel.innerHTML = '<option value="">— Configura API Key —</option>';
+  }
+}
+
+async function plateResultLoadModels() {
+  const mfrId = document.getElementById('plateResultMarca').value;
+  const sel = document.getElementById('plateResultModello');
+  sel.innerHTML = '<option value="">— Caricamento... —</option>';
+  document.getElementById('plateResultType').innerHTML = '<option value="">— Versione —</option>';
+  if (!mfrId) { sel.innerHTML = '<option value="">— Modello —</option>'; return; }
+  try {
+    const data = await cachedApiCall(`catalog_models_${mfrId}`, () => getPartsProvider().getModels(mfrId));
+    const items = Array.isArray(data) ? data : (data.data || data.models || []);
+    sel.innerHTML = '<option value="">— Modello —</option>' + items.map(m => `<option value="${m.id}">${m.name || m.title} ${m.year_from ? '(' + m.year_from + ')' : ''}</option>`).join('');
+  } catch(e) {
+    sel.innerHTML = '<option value="">— Errore —</option>';
+  }
+}
+
+async function plateResultLoadTypes() {
+  const modelId = document.getElementById('plateResultModello').value;
+  const sel = document.getElementById('plateResultType');
+  sel.innerHTML = '<option value="">— Caricamento... —</option>';
+  if (!modelId) { sel.innerHTML = '<option value="">— Versione —</option>'; return; }
+  try {
+    const data = await cachedApiCall(`catalog_types_${modelId}`, () => getPartsProvider().getTypes(modelId));
+    const items = Array.isArray(data) ? data : (data.data || data.modelTypes || []);
+    sel.innerHTML = '<option value="">— Versione —</option>' + items.map(t => `<option value="${t.id}">${t.name || t.title || 'N/D'} ${t.engine || ''}</option>`).join('');
+  } catch(e) {
+    sel.innerHTML = '<option value="">— Errore —</option>';
+  }
+}
+
+function plateResultSearchParts() {
+  const mfrId = document.getElementById('plateResultMarca').value;
+  const modelId = document.getElementById('plateResultModello').value;
+  const typeId = document.getElementById('plateResultType').value;
+  if (!mfrId) { toast('Seleziona una marca'); return; }
+
+  const mfrName = document.getElementById('plateResultMarca').selectedOptions[0]?.text || '';
+
+  showCatalogArea();
+  switchCercaTab('modello');
+
+  if (typeId) {
+    const modelName = document.getElementById('plateResultModello').selectedOptions[0]?.text || '';
+    const typeName = document.getElementById('plateResultType').selectedOptions[0]?.text || '';
+    catalogState.mfrId = parseInt(mfrId);
+    catalogState.vehicleId = parseInt(typeId);
+    catalogState.trail = [
+      { label: mfrName, action: `loadCatalogManufacturers()` },
+      { label: modelName, action: `loadCatalogModels(${mfrId},'${mfrName.replace(/'/g,"\\'")}')` },
+      { label: typeName, action: `loadCatalogTypes(${modelId},'${modelName.replace(/'/g,"\\'")}')` }
+    ];
+    loadCatalogCategories(parseInt(typeId), typeName);
+  } else if (modelId) {
+    const modelName = document.getElementById('plateResultModello').selectedOptions[0]?.text || '';
+    catalogState.mfrId = parseInt(mfrId);
+    catalogState.trail = [{ label: mfrName, action: `loadCatalogManufacturers()` }];
+    loadCatalogTypes(parseInt(modelId), modelName);
+  } else {
+    loadCatalogModels(parseInt(mfrId), mfrName);
+  }
 }
 
 async function loadVehicleHistory() {
@@ -280,13 +502,16 @@ async function loadVehicleHistory() {
       <div class="card" style="margin-top:24px">
         <div class="card-header"><h3><i class="fas fa-history"></i> Ricerche Recenti</h3></div>
         <div class="card-body">
-          <table><thead><tr><th>Targa</th><th>Compagnia</th><th>Assicurato</th><th>Data Ricerca</th><th></th></tr></thead>
+          <table><thead><tr><th>Targa</th><th>Veicolo</th><th>Info</th><th>Data Ricerca</th><th></th></tr></thead>
           <tbody>${sorted.map(v => {
             const d = v.data || {};
+            const isRich = d._providerType === 'zyla' || d._providerType === 'carRegistrationApi' || d.CarMake;
+            const vehicleCol = isRich ? `${d.CarMake || ''} ${d.CarModel || ''}`.trim() || '\u2014' : (d.descrizioneTipoVeicolo || d.tipoVeicolo || '\u2014');
+            const infoCol = isRich ? (d.FuelType || d.RegistrationYear || '') : (d.compagniaAssicurativa || (d.assicurazionePresente === 'true' ? '\u2705' : '\u274c'));
             return `<tr>
               <td style="font-family:monospace;font-weight:700">${v.plate}</td>
-              <td>${d.compagniaAssicurativa || '\u2014'}</td>
-              <td>${d.assicurazionePresente === 'true' ? '\u2705' : '\u274c'}</td>
+              <td>${vehicleCol}</td>
+              <td>${infoCol}</td>
               <td>${v.searchedAt ? new Date(v.searchedAt).toLocaleString('it-IT') : '\u2014'}</td>
               <td><button class="btn btn-outline btn-sm" onclick="document.getElementById('inputTarga').value='${v.plate}';searchByPlate()"><i class="fas fa-redo"></i></button></td>
             </tr>`;
@@ -1155,19 +1380,32 @@ async function deleteInvoice(id) {
 // ============================================================
 function loadSettingsUI() {
   document.getElementById('settingsApiKey').value = CONFIG.rapidApiKey;
+  document.getElementById('settingsZylaKey').value = CONFIG.zylaApiKey;
+  document.getElementById('settingsCarRegUser').value = CONFIG.carRegUsername;
   document.getElementById('settingsPlateProvider').value = CONFIG.plateProvider;
   document.getElementById('settingsPartsProvider').value = CONFIG.partsProvider;
   document.getElementById('settingsLaborProvider').value = CONFIG.laborProvider;
+  onPlateProviderChange();
+}
+
+function onPlateProviderChange() {
+  const prov = document.getElementById('settingsPlateProvider').value;
+  document.getElementById('zylaKeyGroup').style.display = prov === 'zyla' ? '' : 'none';
+  document.getElementById('carRegGroup').style.display = prov === 'carRegistrationApi' ? '' : 'none';
 }
 
 function saveSettings() {
   CONFIG.rapidApiKey = document.getElementById('settingsApiKey').value.trim();
+  CONFIG.zylaApiKey = document.getElementById('settingsZylaKey').value.trim();
+  CONFIG.carRegUsername = document.getElementById('settingsCarRegUser').value.trim();
   CONFIG.plateProvider = document.getElementById('settingsPlateProvider').value;
   CONFIG.partsProvider = document.getElementById('settingsPartsProvider').value;
   CONFIG.laborProvider = document.getElementById('settingsLaborProvider').value;
 
   localStorage.setItem('autoparts_config', JSON.stringify({
     rapidApiKey: CONFIG.rapidApiKey,
+    zylaApiKey: CONFIG.zylaApiKey,
+    carRegUsername: CONFIG.carRegUsername,
     plateProvider: CONFIG.plateProvider,
     partsProvider: CONFIG.partsProvider,
     laborProvider: CONFIG.laborProvider

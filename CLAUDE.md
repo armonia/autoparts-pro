@@ -51,10 +51,26 @@ The topbar search (`#globalSearch`) uses the `GlobalSearch` class:
 
 ## API Providers
 
-### Informazioni Targhe (RapidAPI)
-- **Endpoint**: `https://informazioni-targhe.p.rapidapi.com/targa/{plate}`
+### Plate Providers (3 options, selectable in Impostazioni)
+
+#### Informazioni Targhe (RapidAPI) — insurance data only
+- **Endpoint**: `https://informazioni-targhe.p.rapidapi.com` (async job API: submit → poll → retrieve)
+- **Auth**: `X-RapidAPI-Key` header (shared RapidAPI key)
 - **Free tier**: 10 requests/day
-- **Used for**: Italian license plate → vehicle data lookup
+- **Returns**: Insurance status, company, policy number, theft status — NO CarMake/CarModel
+- **Vehicle card**: Shows insurance card + manual marca/modello dropdowns for parts search
+
+#### Zyla (Italy License Plate Lookup) — full vehicle data
+- **Endpoint**: `https://zylalabs.com/api/352/italy+license+plate+lookup+api/458/license+plate+lookup?plate={targa}`
+- **Auth**: `Authorization: Bearer {zylaApiKey}` (separate key from RapidAPI)
+- **Returns**: CarMake, CarModel, Version, RegistrationYear, EngineSize, FuelType, ABS, AirBag
+- **Vehicle card**: Rich specs grid + "Cerca Ricambi per [Make] [Model]" auto-catalog button
+
+#### CarRegistrationAPI — full vehicle data
+- **Endpoint**: `https://www.regcheck.org.uk/api/reg.asmx/CheckItaly?RegistrationNumber={targa}&username={username}`
+- **Auth**: `username` query param (from carregistrationapi.com)
+- **Returns**: XML wrapping JSON with same fields as Zyla
+- **Vehicle card**: Same rich specs grid + auto-catalog button
 
 ### Auto Parts Catalog (RapidAPI)
 - **Endpoint**: `https://auto-parts-catalog.p.rapidapi.com/...`
@@ -65,7 +81,11 @@ The topbar search (`#globalSearch`) uses the `GlobalSearch` class:
 - **Website**: https://openlaborproject.com
 - **Free tier**: Unlimited (static data hardcoded in `labor.js`)
 
-Both RapidAPI services use the same API key (header `X-RapidAPI-Key`).
+RapidAPI services (Informazioni Targhe + Auto Parts Catalog) share the same API key. Zyla and CarRegistrationAPI use separate credentials.
+
+### Auto-Catalog Linking
+
+When a plate provider returns CarMake/CarModel (Zyla or CarRegistrationAPI), the vehicle result card shows a "Cerca Ricambi" button that calls `autoNavigateCatalogByMake(make, model)`. This fuzzy-matches the manufacturer in the catalog, navigates to it, then tries to match the model too.
 
 ## Adding a New Provider
 
@@ -76,8 +96,10 @@ Both RapidAPI services use the same API key (header `X-RapidAPI-Key`).
 
 ## Free Tier Limits
 
-- **Informazioni Targhe**: 10 plate lookups/day
-- **Auto Parts Catalog**: 100 API calls/month
+- **Informazioni Targhe**: 10 plate lookups/day (RapidAPI key)
+- **Zyla**: Depends on plan (separate Zyla API key)
+- **CarRegistrationAPI**: Depends on plan (username from carregistrationapi.com)
+- **Auto Parts Catalog**: 100 API calls/month (RapidAPI key)
 - **Cache**: All API responses cached 24h in IndexedDB to minimize quota usage
 - Error `429` → quota exceeded toast + cache fallback
 
